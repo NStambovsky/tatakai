@@ -1,4 +1,4 @@
-import { initialState, legalMoves, applyMove, passTurn, canPass, chooseMove, validSave, camp, numberOf, sideOf, partner } from './engine.js?v=5';
+import { initialState, legalMoves, applyMove, passTurn, canPass, chooseMove, validSave, camp, numberOf, sideOf, partner } from './engine.js?v=6';
 const $ = id => document.getElementById(id);
 const KEY = 'tatakai-v4';
 let state = initialState(), difficulty = 'medium', selected = null, busy = false, lastMove = null, timer = null, generation = 0;
@@ -73,7 +73,7 @@ function render() {
   $('roll').disabled=!active()||state.turn!==0||state.roll!==null||busy;
   $('roll').hidden=active() && state.turn===0 && state.roll!==null && !busy && moves.length===0;
   $('pass').hidden=!(state.turn===0 && !busy && canPass(state));
-  $('pass').textContent=state.roll===6?'Skip turn →':'Pass turn →';
+  $('pass').textContent='Skip turn →';
   $('log').replaceChildren(...log.map(t=>{const li=document.createElement('li');li.textContent=t;return li;}));
   let title,detail,instruction;
   if(!active()) {
@@ -86,7 +86,7 @@ function render() {
   } else {
     $('turn-label').textContent='YOUR TURN';
     title=state.roll===null?'Make your move.':moves.length===0?'No opening this turn.':selected===null?'Choose your agent.':'Choose a destination.';
-    detail=state.roll===null?moves.length?'Capture the adjacent home agent without rolling, or roll to move.':'Roll the die to see your options.':state.roll===6?'Six: move, capture, or skip. Returning home is optional.':`Rolled a ${state.roll}. Move to a ${state.roll} space on either side.`;
+    detail=state.roll===null?moves.length?'Capture the adjacent home agent, roll to move, or skip.':'Roll the die to see your options, or skip this turn.':state.roll===6?'Six: move, capture, or skip. Returning home is optional.':`Rolled a ${state.roll}. Move to a ${state.roll} space, capture if available, or skip.`;
     instruction=moves.length===0&&state.roll!==null?'No agent can use this roll. Pass to the rival.':selected===null?'Tap one of your agents, then a highlighted space.':`Selected: ${textPos(selected)}. Tap a gold destination. Tap your selected agent again if highlighted to capture in place; this uses your turn.`;
   }
   $('status-title').textContent=title;$('status-detail').textContent=detail;$('selection').textContent=instruction;
@@ -117,7 +117,7 @@ function scheduleAI() {
       if(token!==generation)return;
       const move=chooseMove(state,difficulty,random);busy=false;
       if(move)execute(move);
-      else{addLog(`Rival rolled ${state.roll}: ${state.roll===6?'skipped the turn':'no legal move. Turn passed'}.`);state=passTurn(state);selected=null;save();render();}
+      else{addLog(`Rival rolled ${state.roll}: skipped the turn.`);state=passTurn(state);selected=null;save();render();}
     },650);
   },500);
 }
@@ -126,7 +126,7 @@ $('roll').addEventListener('click',()=>{
   busy=true;render();$('die').classList.add('rolling');const token=generation;
   timer=setTimeout(()=>{if(token!==generation)return;state.roll=rollDie();busy=false;$('die').classList.remove('rolling');save();render();},400);
 });
-$('pass').addEventListener('click',()=>{if(state.turn!==0||busy||!canPass(state))return;addLog(`You rolled ${state.roll}: ${state.roll===6?'skipped the turn':'no legal move. Turn passed'}.`);state=passTurn(state);selected=null;save();render();if(active())scheduleAI();});
+$('pass').addEventListener('click',()=>{if(state.turn!==0||busy||!canPass(state))return;addLog(`You skipped the turn${state.roll===null?' without rolling':` after rolling ${state.roll}`}.`);state=passTurn(state);selected=null;save();render();if(active())scheduleAI();});
 $('difficulty').addEventListener('change',()=>{difficulty=$('difficulty').value;save();render();});
 $('help').addEventListener('click',()=>$('rules').showModal());
 $('close-rules').addEventListener('click',()=>$('rules').close());

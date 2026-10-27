@@ -68,8 +68,7 @@ export function applyMove(state, move, roll = state.roll) {
   return next;
 }
 export function canPass(state) {
-  return state.winner === null && !state.draw && Number.isInteger(state.roll) && state.roll >= 1 && state.roll <= 6 &&
-    (state.roll === 6 || legalMoves(state).length === 0);
+  return state.winner === null && !state.draw;
 }
 export function passTurn(state) {
   if (!canPass(state)) throw new Error('Cannot skip this turn');
@@ -110,7 +109,7 @@ function expectedReply(state, side) {
     if (!moves.length) { sum += evaluate(passTurn({...state,roll}),side); continue; }
     // The next player chooses their strongest response for each possible roll.
     const vals = moves.map(m => evaluate(applyMove(state,m,roll),side));
-    if (roll === 6) vals.push(evaluate(passTurn({...state,roll}),side));
+    vals.push(evaluate(passTurn({...state,roll}),side));
     sum += state.turn === side ? Math.max(...vals) : Math.min(...vals);
   }
   return sum/6;
@@ -120,7 +119,7 @@ export function chooseMove(state, difficulty = 'medium', random = Math.random) {
   if (!moves.length) return null;
   const immediate = moves.filter(m => applyMove(state,m).winner === state.turn);
   if (immediate.length) return immediate[Math.floor(random()*immediate.length)];
-  if (state.roll === 6) moves.push(null); // Optional skip competes with moving.
+  moves.push(null); // Optional skip competes with moving.
   if (difficulty === 'easy') return moves[Math.floor(random()*moves.length)];
   let best = -Infinity, choices = [];
   for (const move of moves) {

@@ -12,7 +12,7 @@ test('a six enters a guarded camp from the field without capturing defenders',()
 test('returning defender captures an infiltrator',()=>{const s=setup([0,21,21,21,21,21],[3,0,0,0,0,0],6);s.turn=1;const n=move(s,3,0);assert.equal(n.pieces[0][0],-1);assert.equal(n.winner,null);});
 test('infiltration of undefended camp wins immediately',()=>{const s=setup([21,21,21,21,21,7],[1,2,3,4,5,6],6);assert.equal(move(s,7,0).winner,0);});
 test('moving the last defender out loses to an infiltrator',()=>{const s=setup([21,11,12,13,14,15],[21,0,0,0,0,0],4);assert.equal(move(s,21,17).winner,1);});
-test('cannot pass a playable roll or make an illegal move',()=>{const s=initialState();s.roll=4;assert.throws(()=>passTurn(s));assert.throws(()=>applyMove(s,{piece:0,from:21,to:1}));});
+test('can skip a playable roll but cannot make an illegal move',()=>{const s=initialState();s.roll=4;assert.equal(passTurn(s).turn,1);assert.throws(()=>applyMove(s,{piece:0,from:21,to:1}));});
 test('passes when all four numbered spaces are protected or occupied',()=>{const s=setup([21,21,21,21,17,18],[0,0,0,0,3,4],4);assert.equal(legalMoves(s).length,0);assert.equal(passTurn(s).turn,1);});
 test('each difficulty takes a forced immediate win',()=>{const s=setup([21,21,21,21,21,7],[1,2,3,4,5,6],6);for(const d of ['easy','medium','hard'])assert.equal(applyMove(s,chooseMove(s,d,()=>0)).winner,0);});
 test('medium and hard preserve the last defender against an infiltrator',()=>{const s=setup([21,11,12,13,14,15],[21,0,0,0,0,0],4);for(const d of ['medium','hard'])assert.notEqual(chooseMove(s,d,()=>0).from,21);});
@@ -69,11 +69,11 @@ for (const side of [0,1]) {
     }
   });
 }
-test('pending capture prevents pass and every AI can use it on a nonmatching roll',()=>{
+test('pending capture is optional and every AI can use it on a nonmatching roll',()=>{
   const s=setup([21,21,21,21,21,3],[0,0,0,0,0,4],2);
-  assert.throws(()=>passTurn(s));
+  assert.equal(passTurn(s).turn,1);
   for(const d of ['easy','medium','hard']){
-    const m=chooseMove(s,d,()=>.999999);assert.ok(legalMoves(s).some(x=>JSON.stringify(x)===JSON.stringify(m)));
+    const m=chooseMove(s,d,()=>.999999);assert.ok(m===null||legalMoves(s).some(x=>JSON.stringify(x)===JSON.stringify(m)));
     const only=structuredClone(s);only.roll=null;
     assert.equal(chooseMove(only,d,()=>0).kind,'capture');
   }
@@ -88,8 +88,8 @@ test('six skip keeps every piece in place and consumes exactly one turn',()=>{
  for(const side of [0,1]){const s=initialState();s.turn=side;s.roll=6;s.pieces[side][0]=side===0?17:3;
  assert.ok(legalMoves(s).length);const n=passTurn(s);assert.deepEqual(n.pieces,s.pieces);assert.equal(n.turn,1-side);assert.equal(n.roll,null);assert.equal(n.ply,1);assert.equal(s.ply,0);assert.ok(validSave(n));}
 });
-test('skip is forbidden before rolling, on playable numbered rolls, and after game end',()=>{
- const s=initialState();assert.throws(()=>passTurn(s));s.roll=4;assert.throws(()=>passTurn(s));s.roll=6;s.draw=true;assert.throws(()=>passTurn(s));s.draw=false;s.winner=0;assert.throws(()=>passTurn(s));
+test('skip is available before rolling and on numbered rolls but not after game end',()=>{
+ const s=initialState();assert.equal(passTurn(s).turn,1);s.roll=4;assert.equal(passTurn(s).turn,1);s.roll=6;s.draw=true;assert.throws(()=>passTurn(s));s.draw=false;s.winner=0;assert.throws(()=>passTurn(s));
 });
 test('AI can skip six rather than break a protected home pair',()=>{
  const s=setup([21,21,21,21,17,18],[0,0,0,0,0,0],6);
@@ -99,4 +99,16 @@ test('skipping a six retains adjacent threats and observes the turn limit',()=>{
  const s=setup([21,21,21,21,21,17],[0,0,0,0,0,18],6);s.ply=298;
  const n=passTurn(s);assert.ok(legalMoves(n).some(m=>m.kind==='capture'));assert.deepEqual(n.pieces,s.pieces);
  n.roll=6;const end=passTurn(n);assert.equal(end.ply,300);assert.equal(end.draw,true);assert.ok(validSave(end));
+});
+
+test('last agent can stay in enemy camp by skipping before or after every roll',()=>{
+ for(const side of [0,1])for(const roll of [null,1,2,3,4,5,6]){
+ const s=initialState();s.turn=side;s.roll=roll;s.pieces[side]=[-1,-1,-1,-1,-1,camp(1-side)];
+ const n=passTurn(s);assert.deepEqual(n.pieces,s.pieces);assert.equal(n.turn,1-side);assert.equal(n.roll,null);assert.equal(n.ply,1);assert.ok(validSave(n));
+ }
+});
+test('all difficulties can skip a playable numbered roll',()=>{
+ const s=initialState();s.roll=4;
+ assert.equal(chooseMove(s,'easy',()=>.9999),null);
+ for(const d of ['medium','hard']){const m=chooseMove(s,d,()=>0);assert.ok(m===null||legalMoves(s).some(x=>JSON.stringify(x)===JSON.stringify(m)));}
 });

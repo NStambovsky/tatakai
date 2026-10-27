@@ -50,6 +50,6 @@ The Concept & Mechanics video explicitly shows capture from the **adjacent empty
 
 Implements the requested home-side advantage and opponent-side eligibility for base entry. Mixed rows encode threats directly; alternating turns provide the home response window without separate timers. In-place captures use the same legal move list for the UI and every AI level. Version 3 saves are not loaded because their positions reflect immediate away-side capture.
 
-## Optional six skip
+## Optional turn skip
 
-On any roll of six, either player may skip instead of moving or capturing. This consumes the turn and leaves all agents in place. All AI levels consider skipping; immediate wins still take priority. Existing v4 saves remain compatible.
+On every turn, before or after rolling any number, either player may skip instead of moving or capturing. This consumes the turn and leaves all agents in place. All AI levels consider skipping; immediate wins still take priority. Existing v4 saves remain compatible.
