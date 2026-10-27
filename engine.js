@@ -1,5 +1,5 @@
 // State and rules are independent of the UI. 0 = ivory, 1 = charcoal.
-export const VERSION = 2;
+export const VERSION = 3;
 export const camp = side => side === 0 ? 21 : 0;
 export const sideOf = pos => pos <= 10 ? 1 : 0;
 export const numberOf = pos => pos === 0 || pos === 21 ? 6 : pos <= 10 ? 6 - Math.ceil(pos/2) : Math.ceil((pos-10)/2);
@@ -22,11 +22,17 @@ export function legalMoves(state, roll = state.roll, side = state.turn) {
   for (const from of starts) {
     const piece = state.pieces[side].indexOf(from);
     for (let to = 0; to < 22; to++) {
-      if (from === to || numberOf(to) !== roll) continue;
-      const defenders = state.pieces[1-side].filter(p => p === to).length;
-      if (roll !== 6 && state.pieces[side].includes(to)) continue;
-      const mate = to % 2 === 1 ? to+1 : to-1;
-      if (roll !== 6 && defenders && state.pieces[1-side].includes(mate)) continue;
+      if (numberOf(to) !== roll) continue;
+      // Deploy from a camp to your own numbered half before crossing.
+      const fromCamp = from === 0 || from === 21;
+      if (fromCamp && roll !== 6 && sideOf(to) !== side) continue;
+      // A camp-to-camp shortcut would bypass deployment entirely.
+      if (fromCamp && to === camp(1-side)) continue;
+      // A home defender may use a six to discover an infiltrator without moving.
+      const sweep = roll === 6 && from === to && to === camp(side) && state.pieces[1-side].includes(to);
+      if (from === to && !sweep) continue;
+      // Captures happen across a row: enter its empty partner space.
+      if (roll !== 6 && state.pieces.flat().includes(to)) continue;
       moves.push({piece, from, to});
     }
   }
@@ -40,7 +46,8 @@ export function applyMove(state, move, roll = state.roll) {
   // At camp, only a returning defender captures an infiltrator. Entering a
   // guarded enemy camp does not capture its defenders (as shown in the reel).
   if (roll !== 6 || to === camp(side)) {
-    const victim = next.pieces[enemy].indexOf(to);
+    const captureAt = roll === 6 ? to : to % 2 === 1 ? to+1 : to-1;
+    const victim = next.pieces[enemy].indexOf(captureAt);
     if (victim >= 0) next.pieces[enemy][victim] = -1;
   }
   next.pieces[side][allowed.piece] = to;
@@ -111,5 +118,8 @@ export function validSave(s) {
     [null,0,1].includes(s.winner) && typeof s.draw==='boolean' &&
     Array.isArray(s.pieces) && s.pieces.length===2 && s.pieces.every(a => Array.isArray(a) && a.length===6 && a.every(p => Number.isInteger(p) && p>=-1 && p<=21)) &&
     s.winner === outcome(s) && s.draw === (s.winner === null && s.ply >= 300) &&
-    !Array.from({length:20},(_,i)=>i+1).some(p => s.pieces.flat().filter(x=>x===p).length>1);
+    !Array.from({length:20},(_,i)=>i+1).some(p => s.pieces.flat().filter(x=>x===p).length>1) &&
+    !Array.from({length:10},(_,i)=>i*2+1).some(p =>
+      (s.pieces[0].includes(p) && s.pieces[1].includes(p+1)) ||
+      (s.pieces[1].includes(p) && s.pieces[0].includes(p+1)));
 }

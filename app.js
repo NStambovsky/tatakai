@@ -1,6 +1,6 @@
-import { initialState, legalMoves, applyMove, passTurn, chooseMove, validSave, camp, numberOf, sideOf } from './engine.js';
+import { initialState, legalMoves, applyMove, passTurn, chooseMove, validSave, camp, numberOf, sideOf } from './engine.js?v=3';
 const $ = id => document.getElementById(id);
-const KEY = 'tatakai-v2';
+const KEY = 'tatakai-v3';
 let state = initialState(), difficulty = 'medium', selected = null, busy = false, lastMove = null, timer = null, generation = 0;
 let log = ['The camps are quiet. You move first.'];
 const notes = {easy:'Explores freely. A gentle opponent for learning the board.',medium:'Looks for captures and keeps an eye on camp.',hard:'Plans around your best reply across all six possible rolls.'};
@@ -84,8 +84,8 @@ function render() {
   } else {
     $('turn-label').textContent='YOUR TURN';
     title=state.roll===null?'Make your move.':moves.length===0?'No opening this turn.':selected===null?'Choose your agent.':'Choose a destination.';
-    detail=state.roll===null?'Roll the die to see your options.':state.roll===6?'Six: return home or infiltrate their camp.':`Rolled a ${state.roll}. Move to a ${state.roll} space on either side.`;
-    instruction=moves.length===0&&state.roll!==null?'Both destinations are blocked. Pass to the rival.':selected===null?'Tap one of your agents, then a highlighted space.':`Selected: ${textPos(selected)}. Tap a gold destination.`;
+    detail=state.roll===null?'Roll the die to see your options.':state.roll===6?'Six: defend home, remove an infiltrator, or enter their camp.':`Rolled a ${state.roll}. Move to a ${state.roll} space on either side.`;
+    instruction=moves.length===0&&state.roll!==null?'No agent can use this roll. Pass to the rival.':selected===null?'Tap one of your agents, then a highlighted space.':`Selected: ${textPos(selected)}. Tap a gold destination. Tap camp again to remove an infiltrator if highlighted.`;
   }
   $('status-title').textContent=title;$('status-detail').textContent=detail;$('selection').textContent=instruction;
 }
@@ -101,7 +101,7 @@ function execute(move) {
   const side=state.turn, rolled=state.roll, before=state.pieces[1-side].filter(p=>p>=0).length;
   state=applyMove(state,move);lastMove={from:move.from,to:move.to};selected=null;
   const captured=state.pieces[1-side].filter(p=>p>=0).length<before;
-  addLog(`${side===0?'You':'Rival'} rolled ${rolled}: ${textPos(move.from)} → ${textPos(move.to)}${captured?' · captured an agent':''}.`);
+  addLog(move.from===move.to ? `${side===0?'You':'Rival'} rolled 6: a home defender discovered and removed an infiltrator.` : `${side===0?'You':'Rival'} rolled ${rolled}: ${textPos(move.from)} → ${textPos(move.to)}${captured?' · captured an adjacent agent':''}.`);
   save();render();
   if(active() && state.turn===1)scheduleAI();
   else if(state.turn===0 && active())$('roll').focus({preventScroll:true});
