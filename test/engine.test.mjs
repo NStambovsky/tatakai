@@ -180,3 +180,25 @@ test('Ultra full games across all levels preserve coins, saves, and legal power 
 test('medium and hard deploy rather than skip every opening numbered roll',()=>{
  for(const mode of ['classic','ultra'])for(let roll=1;roll<=5;roll++)for(const difficulty of ['medium','hard']){const s=initialState(mode);s.roll=roll;const m=chooseMove(s,difficulty,()=>0);assert.ok(m,`${mode} ${difficulty} should deploy on ${roll}`);assert.equal(m.from,21);}
 });
+
+test('computer advances out of paired home rows instead of repeatedly skipping',()=>{
+ for(const mode of ['classic','ultra'])for(const side of [0,1])for(const roll of [2,4])for(const d of ['medium','hard']){
+ const s=initialState(mode);s.turn=side;s.roll=roll;
+ const flip=p=>side===1?p:21-p;
+ s.pieces[side]=[flip(21),flip(7),flip(8),flip(3),flip(4),camp(side)];
+ const m=chooseMove(s,d,()=>.9999);assert.ok(m,`${mode} side ${side} ${d} roll ${roll} stalled`);
+ assert.equal(sideOf(m.to),1-side);assert.notEqual(m.from,camp(1-side));
+ }
+});
+test('enemy makes progress through repeated turns with a passive player',()=>{
+ for(const mode of ['classic','ultra'])for(const d of ['medium','hard']){
+ let s=initialState(mode),advances=0;
+ for(let i=0;i<36&&canPass(s);i++){
+ if(s.turn===0){s=passTurn(s);continue;}
+ s=rollTurn(s,1+i%6);const m=chooseMove(s,d,()=>0);
+ if(m&&m.to>10)advances++;
+ s=m?applyMove(s,m):passTurn(s);
+ }
+ assert.ok(advances>=3,`${mode} ${d} only advanced ${advances} times`);
+ }
+});

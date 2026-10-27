@@ -1,4 +1,4 @@
-import { initialState, legalMoves, applyMove, passTurn, canPass, chooseMove, validSave, camp, numberOf, sideOf, partner, rollTurn, canPower, usePower, choosePower } from './engine.js?v=8';
+import { initialState, legalMoves, applyMove, passTurn, canPass, chooseMove, validSave, camp, numberOf, sideOf, partner, rollTurn, canPower, usePower, choosePower } from './engine.js?v=9';
 const $ = id => document.getElementById(id);
 const KEY = 'tatakai-v4';
 let state = initialState(), difficulty = 'medium', selected = null, busy = false, lastMove = null, timer = null, generation = 0;

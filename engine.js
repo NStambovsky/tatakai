@@ -104,10 +104,10 @@ export function evaluate(state, side) {
     value += invaders * 24;
     if (invaders) value += Math.max(0, 6-enemies.filter(p => p === camp(1-s)).length) * 6;
     const positions = [...new Set(own.filter(p => p > 0 && p < 21))];
-    for (const pos of positions) value += own.includes(pos % 2 === 1 ? pos+1 : pos-1) ? 9 : -2;
+    for (const pos of positions) value += own.includes(pos % 2 === 1 ? pos+1 : pos-1) ? 3 : -2;
     value += positions.length * 4; // Deployment should beat endless opening skips.
     // Advancing enables a six; mixed rows favor the side with a pending capture.
-    value += positions.filter(p => sideOf(p) !== s).length * 5;
+    value += positions.filter(p => sideOf(p) !== s).length * 14;
     for (const pos of positions) if (enemies.includes(partner(pos))) {
       value += state.turn === s ? 12 : -12;
     }
@@ -144,7 +144,11 @@ export function chooseMove(state, difficulty = 'medium', random = Math.random) {
     if (score > best + 0.001) { best=score; choices=[move]; }
     else if (Math.abs(score-best) < 0.001) choices.push(move);
   }
-  return choices[Math.floor(random()*choices.length)];
+  // If waiting is only tied with a move, prefer acting. Keep strictly better
+  // defensive skips (for example, a six that would abandon a protected row).
+  const activeChoices=choices.filter(Boolean);
+  const pool=activeChoices.length?activeChoices:choices;
+  return pool[Math.floor(random()*pool.length)];
 }
 export function validSave(s) {
   return !!s && s.version === VERSION && [0,1].includes(s.turn) &&
