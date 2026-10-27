@@ -1,6 +1,6 @@
-import { initialState, legalMoves, applyMove, passTurn, chooseMove, validSave, camp, numberOf, sideOf } from './engine.js?v=3';
+import { initialState, legalMoves, applyMove, passTurn, chooseMove, validSave, camp, numberOf, sideOf, partner } from './engine.js?v=4';
 const $ = id => document.getElementById(id);
-const KEY = 'tatakai-v3';
+const KEY = 'tatakai-v4';
 let state = initialState(), difficulty = 'medium', selected = null, busy = false, lastMove = null, timer = null, generation = 0;
 let log = ['The camps are quiet. You move first.'];
 const notes = {easy:'Explores freely. A gentle opponent for learning the board.',medium:'Looks for captures and keeps an eye on camp.',hard:'Plans around your best reply across all six possible rolls.'};
@@ -41,12 +41,13 @@ function render() {
     b.type='button'; b.dataset.pos=pos;
     b.className=isCamp?`camp ${pos===0?'enemy':''}`:'space';
     if(destinations.includes(pos)) b.classList.add('available');
+    if(!isCamp && (own || rival) && counts(partner(pos),own?1:0)) b.classList.add('contested');
     if(selected===pos) b.classList.add('selected');
     if(lastMove?.to===pos) b.classList.add('last-move');
     const canSelect=moves.some(m=>m.from===pos);
     if(canSelect)b.classList.add('selectable');
     b.disabled=!active() || state.turn!==0 || busy || (!canSelect && !destinations.includes(pos));
-    b.setAttribute('aria-label',`${textPos(pos)}, ${own} Ivory, ${rival} rival${destinations.includes(pos)?', legal destination':''}${canSelect?', select agent':''}`);
+    b.setAttribute('aria-label',`${textPos(pos)}, ${own} Ivory, ${rival} rival${destinations.includes(pos)?', legal destination':''}${moves.some(m=>m.from===pos&&m.kind==='capture')?', capture available: select and tap again':''}${canSelect?', select agent':''}`);
     b.setAttribute('aria-pressed',String(selected===pos));
     const num=document.createElement('span');num.className='number';num.textContent=numberOf(pos);b.append(num);
     if(isCamp){const label=document.createElement('span');label.className='camp-label';label.textContent=pos===0?'RIVAL CAMP':'YOUR CAMP';b.append(label);}
@@ -84,13 +85,13 @@ function render() {
   } else {
     $('turn-label').textContent='YOUR TURN';
     title=state.roll===null?'Make your move.':moves.length===0?'No opening this turn.':selected===null?'Choose your agent.':'Choose a destination.';
-    detail=state.roll===null?'Roll the die to see your options.':state.roll===6?'Six: defend home, remove an infiltrator, or enter their camp.':`Rolled a ${state.roll}. Move to a ${state.roll} space on either side.`;
-    instruction=moves.length===0&&state.roll!==null?'No agent can use this roll. Pass to the rival.':selected===null?'Tap one of your agents, then a highlighted space.':`Selected: ${textPos(selected)}. Tap a gold destination. Tap camp again to remove an infiltrator if highlighted.`;
+    detail=state.roll===null?moves.length?'Capture the adjacent home agent without rolling, or roll to move.':'Roll the die to see your options.':state.roll===6?'Six: return home, sweep an infiltrator, or enter their camp from their side.':`Rolled a ${state.roll}. Move to a ${state.roll} space on either side.`;
+    instruction=moves.length===0&&state.roll!==null?'No agent can use this roll. Pass to the rival.':selected===null?'Tap one of your agents, then a highlighted space.':`Selected: ${textPos(selected)}. Tap a gold destination. Tap your selected agent again if highlighted to capture in place; this uses your turn.`;
   }
   $('status-title').textContent=title;$('status-detail').textContent=detail;$('selection').textContent=instruction;
 }
 function handleCell(pos) {
-  if(!active()||busy||state.turn!==0||state.roll===null)return;
+  if(!active()||busy||state.turn!==0)return;
   const moves=legalMoves(state);
   if(selected!==null){const m=moves.find(m=>m.from===selected&&m.to===pos);if(m){execute(m);return;}}
   selected=selected===pos?null:moves.some(m=>m.from===pos)?pos:null;
@@ -101,7 +102,7 @@ function execute(move) {
   const side=state.turn, rolled=state.roll, before=state.pieces[1-side].filter(p=>p>=0).length;
   state=applyMove(state,move);lastMove={from:move.from,to:move.to};selected=null;
   const captured=state.pieces[1-side].filter(p=>p>=0).length<before;
-  addLog(move.from===move.to ? `${side===0?'You':'Rival'} rolled 6: a home defender discovered and removed an infiltrator.` : `${side===0?'You':'Rival'} rolled ${rolled}: ${textPos(move.from)} → ${textPos(move.to)}${captured?' · captured an adjacent agent':''}.`);
+  addLog(move.kind==='capture' ? `${side===0?'You':'Rival'} captured the adjacent agent from ${textPos(move.from)} · turn used${rolled===null?' without rolling':''}.` : move.from===move.to ? `${side===0?'You':'Rival'} rolled 6: a home defender discovered and removed an infiltrator.` : `${side===0?'You':'Rival'} rolled ${rolled}: ${textPos(move.from)} → ${textPos(move.to)}${captured?' · captured an adjacent agent':move.to>0&&move.to<21&&state.pieces[1-side].includes(partner(move.to))?' · home agent threatened; may escape or countercapture':''}.`);
   save();render();
   if(active() && state.turn===1)scheduleAI();
   else if(state.turn===0 && active())$('roll').focus({preventScroll:true});

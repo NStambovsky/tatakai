@@ -1,8 +1,9 @@
 // State and rules are independent of the UI. 0 = ivory, 1 = charcoal.
-export const VERSION = 3;
+export const VERSION = 4;
 export const camp = side => side === 0 ? 21 : 0;
 export const sideOf = pos => pos <= 10 ? 1 : 0;
 export const numberOf = pos => pos === 0 || pos === 21 ? 6 : pos <= 10 ? 6 - Math.ceil(pos/2) : Math.ceil((pos-10)/2);
+export const partner = pos => pos % 2 === 1 ? pos+1 : pos-1;
 export function initialState() {
   return {version: VERSION, pieces: [Array(6).fill(21), Array(6).fill(0)], turn: 0, roll: null, ply: 0, winner: null, draw: false};
 }
@@ -15,19 +16,27 @@ export function outcome(state) {
   return null;
 }
 export function legalMoves(state, roll = state.roll, side = state.turn) {
-  if (state.winner !== null || state.draw || !Number.isInteger(roll) || roll < 1 || roll > 6) return [];
+  if (state.winner !== null || state.draw) return [];
+  if (roll !== null && (!Number.isInteger(roll) || roll < 1 || roll > 6)) return [];
   const moves = [];
   // Agents on the same space are interchangeable.
   const starts = [...new Set(state.pieces[side].filter(p => p >= 0))];
   for (const from of starts) {
     const piece = state.pieces[side].indexOf(from);
+    // Mixed rows arise only when an invader approaches a home agent.
+    // Alternating turns guarantee the home agent gets a response first.
+    if (from > 0 && from < 21 && state.pieces[1-side].includes(partner(from)) &&
+        (sideOf(from) !== side || roll === numberOf(from))) {
+      moves.push({piece, from, to: from, kind: 'capture'});
+    }
+    if (roll === null) continue;
     for (let to = 0; to < 22; to++) {
       if (numberOf(to) !== roll) continue;
       // Deploy from a camp to your own numbered half before crossing.
       const fromCamp = from === 0 || from === 21;
       if (fromCamp && roll !== 6 && sideOf(to) !== side) continue;
       // A camp-to-camp shortcut would bypass deployment entirely.
-      if (fromCamp && to === camp(1-side)) continue;
+      if (to === camp(1-side) && (fromCamp || sideOf(from) === side)) continue;
       // A home defender may use a six to discover an infiltrator without moving.
       const sweep = roll === 6 && from === to && to === camp(side) && state.pieces[1-side].includes(to);
       if (from === to && !sweep) continue;
@@ -39,14 +48,14 @@ export function legalMoves(state, roll = state.roll, side = state.turn) {
   return moves;
 }
 export function applyMove(state, move, roll = state.roll) {
-  const allowed = legalMoves(state, roll).find(m => m.piece === move.piece && m.to === move.to && m.from === move.from);
+  const allowed = legalMoves(state, roll).find(m => m.piece === move.piece && m.to === move.to && m.from === move.from && m.kind === move.kind);
   if (!allowed) throw new Error('Illegal move');
   const next = structuredClone(state), side = state.turn, enemy = 1-side;
   const to = allowed.to;
   // At camp, only a returning defender captures an infiltrator. Entering a
   // guarded enemy camp does not capture its defenders (as shown in the reel).
-  if (roll !== 6 || to === camp(side)) {
-    const captureAt = roll === 6 ? to : to % 2 === 1 ? to+1 : to-1;
+  if (allowed.kind === 'capture' || (roll === 6 ? to === camp(side) : sideOf(to) === side)) {
+    const captureAt = allowed.kind === 'capture' ? partner(to) : roll === 6 ? to : partner(to);
     const victim = next.pieces[enemy].indexOf(captureAt);
     if (victim >= 0) next.pieces[enemy][victim] = -1;
   }
@@ -79,6 +88,11 @@ export function evaluate(state, side) {
     if (invaders) value += Math.max(0, 6-enemies.filter(p => p === camp(1-s)).length) * 6;
     const positions = [...new Set(own.filter(p => p > 0 && p < 21))];
     for (const pos of positions) value += own.includes(pos % 2 === 1 ? pos+1 : pos-1) ? 9 : -2;
+    // Advancing enables a six; mixed rows favor the side with a pending capture.
+    value += positions.filter(p => sideOf(p) !== s).length * 5;
+    for (const pos of positions) if (enemies.includes(partner(pos))) {
+      value += sideOf(pos) !== s ? 12 : -12;
+    }
     if (enemies.includes(camp(s)) && home === 1) value -= 30;
     return value;
   };
@@ -118,8 +132,5 @@ export function validSave(s) {
     [null,0,1].includes(s.winner) && typeof s.draw==='boolean' &&
     Array.isArray(s.pieces) && s.pieces.length===2 && s.pieces.every(a => Array.isArray(a) && a.length===6 && a.every(p => Number.isInteger(p) && p>=-1 && p<=21)) &&
     s.winner === outcome(s) && s.draw === (s.winner === null && s.ply >= 300) &&
-    !Array.from({length:20},(_,i)=>i+1).some(p => s.pieces.flat().filter(x=>x===p).length>1) &&
-    !Array.from({length:10},(_,i)=>i*2+1).some(p =>
-      (s.pieces[0].includes(p) && s.pieces[1].includes(p+1)) ||
-      (s.pieces[1].includes(p) && s.pieces[0].includes(p+1)));
+    !Array.from({length:20},(_,i)=>i+1).some(p => s.pieces.flat().filter(x=>x===p).length>1);
 }
