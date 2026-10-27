@@ -4,3 +4,5 @@
 /* Board positions stay readable while inactive; disabled only prevents input. */
 .board button:disabled{opacity:1;cursor:default}.board .token.black{border-color:#a0aa99}.board .number{pointer-events:none}
 @media(max-width:560px){.command{display:contents}.turn-panel{order:0}.table{order:1}.settings{order:2}.field-notes{order:3}.space{height:44px}.roll-row{margin-bottom:12px}.turn-panel .panel-kicker{margin-bottom:10px}.turn-panel{padding:15px 18px}}
+
+.board .space.contested{border:2px dashed #b06b31}
