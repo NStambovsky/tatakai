@@ -58,8 +58,23 @@ On every turn, before or after rolling any number, either player may skip instea
 
 Both halves now require an approach turn before capture. Pending approaches persist in saves and clear when either agent leaves the row. Existing saves remain compatible. Camp defence remains unchanged.
 
-## Capture control and Ultra mode
+## Capture controls and Ultra cards
 
-Capture enemy piece is a separate button below Roll and Skip. It executes a sole eligible capture or the selected agent's capture; multiple candidates get labeled target buttons. Face-offs without a legal capture explain the needed roll.
+Capture enemy piece sits below Roll and Skip, with target choices for multiple captures and an explanation when capture is unavailable.
 
-Choose Classic or Ultra in New game. Existing saves load as Classic and retain the board. Ultra starts both sides at 3 coins; actual captures earn 3 and ending your own turn with one or more agents in the enemy camp earns 1 (including skips). Coins reset each game. Reroll costs 2, set your current die costs 4, queue the enemy's next die costs 5, and recruit at home costs 6. One power per turn; recruiting ends the turn, with at most 8 living agents. Other powers precede the normal move/capture/skip. Forced enemy rolls cannot be rerolled or replaced and remain queued through skips without rolling. Recruitment does not sweep infiltrators. All three AI levels share the same prices, limits, earnings, and powers. These are initial balance settings, not a claim of competitive balance.
+Ultra starts both sides with 3 coins, one random card, and three distinct market offers. Three new offers appear at the start of each turn. Buy into an eight-card hand, then play any number of held cards for free. Purchased offers are removed and cannot be purchased again. Unused cards persist, and saving/reloading never rerolls the market.
+
+| Card | Buy cost | Effect |
+| --- | ---: | --- |
+| Reinforcements | 6 | New agent at home, using one action; eight living agents maximum. |
+| Second Chance | 2 | Reroll the current unlocked die. |
+| Loaded Die | 4 | Set the current unlocked die to a chosen face. |
+| False Orders | 5 | Set and lock the enemy’s next roll; remains queued through unrolled skips. |
+| Double Agent | 5 | One extra action this turn; stacks. Roll again after taking an action. |
+| Marked Target | 3 | Next capture earns 3 bonus coins; stacks and persists until capture. |
+| War Chest | 3 | Gain 4 coins immediately. |
+| Dead Drop | 4 | Draw two random non-Dead-Drop cards; needs one free hand slot. |
+
+Captures earn 3 coins. Ending your own turn with one or more infiltrators earns 1 coin, including skips. Extra actions do not pay income or refresh offers. Skipping forfeits remaining extra actions. A fresh approach cannot be captured during an extra action: the opponent still gets their response turn. Reinforcements do not sweep camp infiltrators. A victory ends immediately, regardless of extra actions.
+
+Classic is unchanged. Existing Ultra games migrate once, retaining the board, coins, and queued rolls while granting each side one starting card. Hands, offers, card IDs, bonuses, pending response windows, and extra actions are saved. All difficulties share card prices and rules. These are initial balance settings.

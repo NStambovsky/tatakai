@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {initialState,legalMoves,applyMove,chooseMove,passTurn,validSave,numberOf,camp,sideOf,canPass,canPower,usePower,rollTurn,choosePower} from '../engine.js';
+import {initialState,legalMoves,applyMove,chooseMove,passTurn,validSave,numberOf,camp,sideOf,canPass,rollTurn} from '../engine.js';
 function setup(white,black,roll=4){const s=initialState();s.pieces=[white,black];s.roll=roll;return s;}
 function move(s,from,to){const m=legalMoves(s).find(m=>m.from===from&&m.to===to);assert.ok(m,`expected move ${from} → ${to}`);return applyMove(s,m);}
 test('original board has four spaces for each number and two camps',()=>{for(let n=1;n<=5;n++)assert.equal(Array.from({length:22},(_,i)=>i).filter(i=>numberOf(i)===n).length,4);assert.equal(numberOf(0),6);assert.equal(numberOf(21),6);});
@@ -129,52 +129,6 @@ test('home approach expires when threatened invader escapes and survives save ro
 });
 test('save rejects forged approaches without an adjacent opponent',()=>{
  const s=initialState();s.pendingCaptures=[{side:0,from:17}];assert.ok(!validSave(s));
-});
-
-function ultra(roll=null){const s=initialState('ultra');s.coins=[20,20];s.roll=roll;return s;}
-test('Classic rejects powers and old saves remain compatible',()=>{
- const s=initialState();assert.throws(()=>usePower(s,'recruit'));delete s.mode;delete s.coins;delete s.forcedRolls;delete s.powerUsed;delete s.rollLocked;assert.ok(validSave(s));
-});
-test('Ultra pays only for actual capture, including camp sweeps',()=>{
- let s=ultra(4);s.pieces[1][0]=18;const approach=move(s,21,17);assert.equal(approach.coins[0],20);
- const n=move(passTurn(approach),17,17);assert.equal(n.coins[0],23);assert.equal(n.pieces[1][0],-1);assert.ok(validSave(n));
- s=ultra(6);s.pieces[1][0]=21;assert.equal(move(s,21,21).coins[0],23);
-});
-test('base income is once per owner turn, on moves or skips, not per infiltrator',()=>{
- for(const side of [0,1]){const s=ultra();s.turn=side;s.pieces[side][0]=camp(1-side);s.pieces[side][1]=camp(1-side);
- const n=passTurn(s);assert.equal(n.coins[side],21);assert.equal(n.coins[1-side],20);assert.equal(s.coins[side],20);
- const reply=passTurn(n);assert.equal(reply.coins[side],21);assert.ok(validSave(reply));}
-});
-test('recruit costs six, ends turn, reuses casualties, and does not capture',()=>{
- const s=ultra();s.pieces[0][0]=-1;s.pieces[1][0]=21;
- const n=usePower(s,'recruit');assert.equal(n.coins[0],14);assert.equal(n.pieces[0].length,6);assert.equal(n.pieces[0][0],21);assert.equal(n.pieces[1][0],21);assert.equal(n.turn,1);assert.equal(n.ply,1);assert.ok(validSave(n));
-});
-test('recruit can grow army to eight living pieces but never nine',()=>{
- let s=ultra();s=usePower(s,'recruit');s=passTurn(s);s=usePower(s,'recruit');s=passTurn(s);assert.equal(s.pieces[0].length,8);assert.ok(!canPower(s,'recruit'));assert.throws(()=>usePower(s,'recruit'));assert.ok(validSave(s));
-});
-test('reroll and set require a roll, charge exact coins, and limit one power per turn',()=>{
- for(const [kind,cost] of [['reroll',2],['set',4]]){const s=ultra();assert.throws(()=>usePower(s,kind,4));const rolled=rollTurn(s,2);const n=usePower(rolled,kind,4);assert.equal(n.roll,4);assert.equal(n.coins[0],20-cost);assert.equal(n.turn,0);assert.equal(n.ply,0);assert.throws(()=>usePower(n,kind,6));assert.ok(validSave(n));assert.equal(passTurn(n).powerUsed,false);}
-});
-test('sabotage queues a visible roll, survives skips and reload, and cannot be overwritten',()=>{
- let s=usePower(ultra(),'sabotage',5);assert.equal(s.coins[0],15);s=passTurn(s);s=passTurn(s);s=JSON.parse(JSON.stringify(s));assert.ok(validSave(s));assert.ok(!canPower(s,'sabotage'));s=passTurn(s);s=rollTurn(s,2);assert.equal(s.roll,5);assert.equal(s.forcedRolls[1],null);assert.equal(s.rollLocked,true);assert.throws(()=>usePower(s,'reroll',3));assert.throws(()=>usePower(s,'set',3));assert.equal(passTurn(s).rollLocked,false);
-});
-test('powers reject insufficient funds, invalid faces, and ended games without mutation',()=>{
- const s=ultra(2);s.coins[0]=0;const before=structuredClone(s);assert.throws(()=>usePower(s,'set',5));assert.deepEqual(s,before);
- s.coins[0]=20;for(const value of [0,7,2.5,null])assert.throws(()=>usePower(s,'set',value));s.draw=true;assert.throws(()=>usePower(s,'recruit'));
-});
-test('Ultra save validation rejects broken wallets and queued rolls',()=>{
- for(const mutate of [s=>s.coins[0]=-1,s=>s.coins[1]=1.5,s=>s.forcedRolls[0]=7,s=>s.powerUsed='yes',s=>s.pieces[0].push(21,21,21)]){const s=ultra();mutate(s);assert.ok(!validSave(s));}
-});
-test('Ultra full games across all levels preserve coins, saves, and legal power usage',()=>{
- let seed=68;const r=()=>{seed=(1664525*seed+1013904223)>>>0;return seed/4294967296;};
- for(const difficulty of ['easy','medium','hard'])for(let game=0;game<3;game++){
- let s=initialState('ultra');while(canPass(s)){
- s=rollTurn(s,1+Math.floor(r()*6));const p=choosePower(s,difficulty,r);
- if(p){const turn=s.turn;s=usePower(s,p.kind,p.kind==='reroll'?1+Math.floor(r()*6):p.value);assert.ok(validSave(s));if(s.turn!==turn)continue;}
- const m=chooseMove(s,difficulty,r);s=m?applyMove(s,m):passTurn(s);assert.ok(validSave(s));
- }
- assert.ok(s.ply<=300);
- }
 });
 
 test('medium and hard deploy rather than skip every opening numbered roll',()=>{

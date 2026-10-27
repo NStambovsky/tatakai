@@ -4,9 +4,10 @@ export const camp = side => side === 0 ? 21 : 0;
 export const sideOf = pos => pos <= 10 ? 1 : 0;
 export const numberOf = pos => pos === 0 || pos === 21 ? 6 : pos <= 10 ? 6 - Math.ceil(pos/2) : Math.ceil((pos-10)/2);
 export const partner = pos => pos % 2 === 1 ? pos+1 : pos-1;
-export function initialState(mode = 'classic') {
+export function initialState(mode = 'classic', random = Math.random) {
   if (!['classic','ultra'].includes(mode)) throw new Error('Unknown mode');
-  return {version: VERSION, mode, coins:[3,3], forcedRolls:[null,null], powerUsed:false, rollLocked:false, pieces: [Array(6).fill(21), Array(6).fill(0)], turn: 0, roll: null, ply: 0, winner: null, draw: false};
+  const state = {version: VERSION, mode, coins:[3,3], forcedRolls:[null,null], powerUsed:false, rollLocked:false, pieces: [Array(6).fill(21), Array(6).fill(0)], turn: 0, roll: null, ply: 0, winner: null, draw: false};
+  return upgradeCards(state, random);
 }
 export function outcome(state) {
   for (const side of [0, 1]) {
@@ -27,6 +28,7 @@ export function legalMoves(state, roll = state.roll, side = state.turn) {
     // Arrival never captures on numbered rows. A home-side attacker earns
     // a later capture; home defenders still countercapture on a matching roll.
     if (from > 0 && from < 21 && state.pieces[1-side].includes(partner(from)) &&
+        !(state.pendingCaptures || []).some(c=>c.side===side&&c.from===from&&c.waiting) &&
         (sideOf(from) !== side || roll === numberOf(from) || (state.pendingCaptures || []).some(c => c.side === side && c.from === from))) {
       moves.push({piece, from, to: from, kind: 'capture'});
     }
@@ -66,20 +68,22 @@ export function applyMove(state, move, roll = state.roll) {
     !(c.side === side && c.from === allowed.from) &&
     next.pieces[c.side].includes(c.from) && next.pieces[1-c.side].includes(partner(c.from)));
   if (to > 0 && to < 21 && allowed.from !== to && next.pieces[enemy].includes(partner(to))) {
-    next.pendingCaptures.push({side, from: to});
+    next.pendingCaptures.push({side, from: to, waiting: true});
   }
   if (next.mode === 'ultra') {
     const captured = state.pieces[enemy].filter(p=>p>=0).length - next.pieces[enemy].filter(p=>p>=0).length;
     next.coins[side] += captured * 3;
+    if(captured && next.cardVersion){next.coins[side]+=next.bounties[side];next.bounties[side]=0;}
   }
-  next.ply++;
-  next.winner = outcome(next);
-  next.draw = next.winner === null && next.ply >= 300;
-  next.turn = enemy;
-  next.roll = null;
-  finishEconomy(next, side);
-  return next;
+  return finishAction(next, side);
 }
+function finishAction(next, side) {
+  next.winner=outcome(next);next.roll=null;next.rollLocked=false;
+  if(next.cardVersion && next.extraActions>0 && next.winner===null){next.extraActions--;return next;}
+  next.ply++;next.draw=next.winner===null&&next.ply>=300;next.turn=1-side;
+  finishEconomy(next,side);return next;
+}
+
 export function canPass(state) {
   return state.winner === null && !state.draw;
 }
@@ -160,19 +164,22 @@ export function validSave(s) {
     (s.mode !== 'ultra' || (Array.isArray(s.coins) && s.coins.length===2 && s.coins.every(c=>Number.isInteger(c)&&c>=0&&c<=2000) &&
       Array.isArray(s.forcedRolls) && s.forcedRolls.length===2 && s.forcedRolls.every(r=>r===null||(Number.isInteger(r)&&r>=1&&r<=6)) &&
       typeof s.powerUsed==='boolean' && typeof s.rollLocked==='boolean' && (!s.rollLocked || s.roll!==null))) &&
+    validCards(s) &&
     (s.pendingCaptures === undefined || (Array.isArray(s.pendingCaptures) && s.pendingCaptures.length <= 10 && s.pendingCaptures.every(c =>
-      c && [0,1].includes(c.side) && Number.isInteger(c.from) && c.from > 0 && c.from < 21 &&
+      c && [0,1].includes(c.side) && Number.isInteger(c.from) && c.from > 0 && c.from < 21 && (c.waiting===undefined||typeof c.waiting==='boolean') &&
       s.pieces[c.side].includes(c.from) && s.pieces[1-c.side].includes(partner(c.from))))) &&
     s.winner === outcome(s) && s.draw === (s.winner === null && s.ply >= 300) &&
     !Array.from({length:20},(_,i)=>i+1).some(p => s.pieces.flat().filter(x=>x===p).length>1);
 }
 
-export const POWER_COSTS = {recruit:6, reroll:2, set:4, sabotage:5};
+
 function finishEconomy(state, side) {
+  for(const c of state.pendingCaptures||[])if(c.side===state.turn)c.waiting=false;
   if (state.mode !== 'ultra') return;
   // Pay once at the end of the owner's turn, regardless of infiltrator count.
   if (state.pieces[side].includes(camp(1-side))) state.coins[side]++;
   state.powerUsed=false;state.rollLocked=false;
+  if(state.cardVersion){state.extraActions=0;if(canPass(state))state.offers[state.turn]=makeOffers(state); }
 }
 export function rollTurn(state, value) {
   if (!canPass(state) || state.roll !== null || !Number.isInteger(value) || value<1 || value>6) throw new Error('Cannot roll');
@@ -182,54 +189,91 @@ export function rollTurn(state, value) {
   if(next.mode==='ultra'){next.rollLocked=forced!==null;next.forcedRolls[state.turn]=null;}
   return next;
 }
-export function canPower(state, kind) {
-  if(state.mode!=='ultra'||!canPass(state)||state.powerUsed||!Object.hasOwn(POWER_COSTS,kind)||state.coins[state.turn]<POWER_COSTS[kind])return false;
-  if(kind==='recruit')return state.pieces[state.turn].filter(p=>p>=0).length<8;
-  if(kind==='sabotage')return state.forcedRolls[1-state.turn]===null;
-  return state.roll!==null&&!state.rollLocked;
-}
-export function usePower(state, kind, value) {
-  if(!canPower(state,kind))throw new Error('Power unavailable');
-  if(kind!=='recruit'&&(!Number.isInteger(value)||value<1||value>6))throw new Error('Choose a die face');
-  let next=structuredClone(state);const side=state.turn;
-  next.coins[side]-=POWER_COSTS[kind];next.powerUsed=true;
-  if(kind==='recruit'){
-    const index=next.pieces[side].indexOf(-1);
-    if(index>=0)next.pieces[side][index]=camp(side);else next.pieces[side].push(camp(side));
-    // Reinforcements arrive at home; they do not sweep infiltrators.
-    next=passTurn(next);
-  } else if(kind==='sabotage')next.forcedRolls[1-side]=value;
-  else next.roll=value;
-  return next;
-}
 function bestTurnValue(state, side) {
   if(state.turn!==side||!canPass(state))return evaluate(state,side);
   return Math.max(evaluate(passTurn(state),side),...legalMoves(state).map(m=>evaluate(applyMove(state,m),side)));
 }
-export function choosePower(state, difficulty='medium', random=Math.random) {
-  if(state.mode!=='ultra'||state.powerUsed||!canPass(state))return null;
-  if(legalMoves(state).some(m=>applyMove(state,m).winner===state.turn))return null;
-  const options=[];
-  if(canPower(state,'recruit'))options.push({kind:'recruit'});
-  if(canPower(state,'reroll'))options.push({kind:'reroll'});
-  for(let value=1;value<=6;value++)for(const kind of ['set','sabotage'])if(canPower(state,kind))options.push({kind,value});
-  if(!options.length)return null;
-  if(difficulty==='easy')return random()<.4?options[Math.floor(random()*options.length)]:null;
-  const side=state.turn, base=bestTurnValue(state,side);
-  let best=base+1, choice=null;
-  for(const option of options){
-    let score;
-    if(option.kind==='reroll')score=[1,2,3,4,5,6].reduce((sum,v)=>sum+bestTurnValue(usePower(state,'reroll',v),side),0)/6;
-    else {
-      const next=usePower(state,option.kind,option.value);
-      score=bestTurnValue(next,side);
-      if(option.kind==='sabotage'){
-        const passed=passTurn(next);
-        // Value denying an opponent their best roll, allowing them to skip.
-        score+=expectedReply(passed,side)-expectedReply(passTurn(state),side);
-      }
-    }
-    if(score>best){best=score;choice=option;}
-  }
-  return choice;
+
+export const CARDS = {
+ recruit:{name:'Reinforcements',cost:6,icon:'♟',type:'Agent',text:'Create an agent at home. Uses one action. Maximum 8 living agents.'},
+ reroll:{name:'Second Chance',cost:2,icon:'↻',type:'Die',text:'Reroll your current die. Does not use an action.'},
+ set:{name:'Loaded Die',cost:4,icon:'⚄',type:'Die',text:'Set your current die to the chosen face. Does not use an action.'},
+ sabotage:{name:'False Orders',cost:5,icon:'⚑',type:'Sabotage',text:'Set the enemy’s next roll to the chosen face. That roll cannot be changed.'},
+ extra:{name:'Double Agent',cost:5,icon:'Ⅱ',type:'Tempo',text:'Gain one extra action this turn. After moving or capturing, roll again and act again. Stacks.'},
+ bounty:{name:'Marked Target',cost:3,icon:'◎',type:'Reward',text:'Your next capture earns 3 bonus coins. Stacks and lasts until you capture.'},
+ grant:{name:'War Chest',cost:3,icon:'◈',type:'Coins',text:'Gain 4 coins immediately. Does not use an action.'},
+ draw:{name:'Dead Drop',cost:4,icon:'✉',type:'Cards',text:'Draw 2 random cards other than Dead Drop. Needs one free hand slot. Does not use an action.'}
+};
+export function upgradeCards(state, random=Math.random){
+ const next=structuredClone(state);
+ if(next.mode!=='ultra'||next.cardVersion)return next;
+ next.cardVersion=1;next.cardSeed=Math.floor(random()*4294967296)>>>0;next.nextCardId=1;
+ next.hands=[[],[]];next.offers=[[],[]];next.extraActions=0;next.bounties=[0,0];
+ for(const side of [0,1]){next.hands[side].push(makeCard(next));next.offers[side]=makeOffers(next);}
+ return next;
+}
+function cardRandom(s){s.cardSeed=(Math.imul(1664525,s.cardSeed)+1013904223)>>>0;return s.cardSeed/4294967296;}
+function makeCard(s,keys=Object.keys(CARDS)){return {id:s.nextCardId++,kind:keys[Math.floor(cardRandom(s)*keys.length)]};}
+function makeOffers(s){const keys=Object.keys(CARDS),offers=[];for(let i=0;i<3;i++){const c=makeCard(s,keys);offers.push(c);keys.splice(keys.indexOf(c.kind),1);}return offers;}
+function validCards(s){
+ if(s.cardVersion===undefined)return true;
+ if(s.mode!=='ultra'||s.cardVersion!==1||!Number.isInteger(s.cardSeed)||s.cardSeed<0||s.cardSeed>4294967295||!Number.isInteger(s.nextCardId)||s.nextCardId<1||
+ !Number.isInteger(s.extraActions)||s.extraActions<0||s.extraActions>100||!Array.isArray(s.bounties)||s.bounties.length!==2||!s.bounties.every(n=>Number.isInteger(n)&&n>=0&&n<=2000))return false;
+ for(const [name,max] of [['hands',8],['offers',3]])if(!Array.isArray(s[name])||s[name].length!==2||!s[name].every(a=>Array.isArray(a)&&a.length<=max&&a.every(c=>c&&Number.isInteger(c.id)&&c.id>0&&c.id<s.nextCardId&&Object.hasOwn(CARDS,c.kind))))return false;
+ const ids=[...s.hands.flat(),...s.offers.flat()].map(c=>c.id);return new Set(ids).size===ids.length;
+}
+export function canBuyCard(s,id){return !!(s.cardVersion&&canPass(s)&&s.hands[s.turn].length<8&&s.offers[s.turn].some(c=>c.id===id&&s.coins[s.turn]>=CARDS[c.kind].cost));}
+export function buyCard(s,id){
+ if(!canBuyCard(s,id))throw new Error('Cannot buy this card');
+ const n=structuredClone(s),i=n.offers[n.turn].findIndex(c=>c.id===id),c=n.offers[n.turn].splice(i,1)[0];
+ n.coins[n.turn]-=CARDS[c.kind].cost;n.hands[n.turn].push(c);return n;
+}
+export function cardBlock(s,id){
+ if(!s.cardVersion||!canPass(s))return 'Game complete';
+ const c=s.hands[s.turn].find(c=>c.id===id);if(!c)return 'Not in your hand';
+ if(c.kind==='recruit'&&s.pieces[s.turn].filter(p=>p>=0).length>=8)return 'Army full: 8 agents';
+ if(c.kind==='sabotage'&&s.forcedRolls[1-s.turn]!==null)return 'Enemy roll already set';
+ if(['set','reroll'].includes(c.kind)){if(s.roll===null)return 'Roll first';if(s.rollLocked)return 'Die locked by enemy';}
+ if(c.kind==='draw'&&s.hands[s.turn].length>=8)return 'Needs one free hand slot';
+ return '';
+}
+export function playCard(s,id,value){
+ const blocked=cardBlock(s,id);if(blocked)throw new Error(blocked);
+ const n=structuredClone(s),side=s.turn,i=n.hands[side].findIndex(c=>c.id===id),c=n.hands[side][i];
+ if(['set','reroll','sabotage'].includes(c.kind)&&(!Number.isInteger(value)||value<1||value>6))throw new Error('Choose a die face');
+ n.hands[side].splice(i,1);
+ if(c.kind==='extra')n.extraActions++;
+ if(c.kind==='bounty')n.bounties[side]+=3;
+ if(c.kind==='grant')n.coins[side]+=4;
+ if(c.kind==='draw')for(let j=0;j<2;j++)n.hands[side].push(makeCard(n,Object.keys(CARDS).filter(k=>k!=='draw')));
+ if(c.kind==='sabotage')n.forcedRolls[1-side]=value;
+ if(c.kind==='reroll'||c.kind==='set')n.roll=value;
+ if(c.kind==='recruit'){
+  const removed=n.pieces[side].indexOf(-1);if(removed>=0)n.pieces[side][removed]=camp(side);else n.pieces[side].push(camp(side));
+  return finishAction(n,side);
+ }
+ return n;
+}
+export function chooseCard(s,difficulty='medium',random=Math.random){
+ if(!s.cardVersion||!canPass(s))return null;
+ if(legalMoves(s).some(m=>applyMove(s,m).winner===s.turn))return null;
+ const side=s.turn,base=bestTurnValue(s,side),choices=[];
+ for(const c of s.hands[side]){
+  if(cardBlock(s,c.id))continue;
+  let value,score;
+  if(c.kind==='set'){
+   score=-Infinity;for(let v=1;v<=6;v++){const x=bestTurnValue(playCard(s,c.id,v),side);if(x>score){score=x;value=v;}}
+   score-=base;
+  }else if(c.kind==='reroll'){score=[1,2,3,4,5,6].reduce((sum,v)=>sum+bestTurnValue(playCard(s,c.id,v),side),0)/6-base;}
+  else if(c.kind==='sabotage'){
+   score=-Infinity;for(let v=1;v<=6;v++){const n=playCard(s,c.id,v);const x=expectedReply(passTurn(n),side)-expectedReply(passTurn(s),side);if(x>score){score=x;value=v;}}
+  }else if(c.kind==='recruit')score=bestTurnValue(playCard(s,c.id),side)-base;
+  else if(c.kind==='extra')score=legalMoves(s).some(m=>m.to!==camp(side)&&m.from!==m.to)?6:0;
+  else score=({grant:8,draw:8,bounty:3})[c.kind];
+  if(score>0||difficulty==='easy'&&random()<.25)choices.push({type:'play',id:c.id,value,score});
+ }
+ if(choices.length){choices.sort((a,b)=>b.score-a.score);return difficulty==='easy'?choices[Math.floor(random()*choices.length)]:choices[0];}
+ const buys=s.offers[side].filter(c=>canBuyCard(s,c.id)).map(c=>({type:'buy',id:c.id,score:({grant:10,extra:7,recruit:5,draw:6,set:5,reroll:3,sabotage:3,bounty:2})[c.kind]}));
+ if(!buys.length||difficulty==='easy'&&random()<.5)return null;
+ buys.sort((a,b)=>b.score-a.score);return difficulty==='easy'?buys[Math.floor(random()*buys.length)]:buys[0];
 }

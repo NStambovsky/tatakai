@@ -1,4 +1,4 @@
-import { initialState, legalMoves, applyMove, passTurn, canPass, chooseMove, validSave, camp, numberOf, sideOf, partner, rollTurn, canPower, usePower, choosePower } from './engine.js?v=9';
+import { initialState, legalMoves, applyMove, passTurn, canPass, chooseMove, validSave, camp, numberOf, sideOf, partner, rollTurn, CARDS, upgradeCards, canBuyCard, buyCard, cardBlock, playCard, chooseCard } from './engine.js?v=10';
 const $ = id => document.getElementById(id);
 const KEY = 'tatakai-v4';
 let state = initialState(), difficulty = 'medium', selected = null, busy = false, lastMove = null, timer = null, generation = 0;
@@ -12,10 +12,11 @@ function save() {
 try {
   const data = JSON.parse(localStorage.getItem(KEY));
   if (data && validSave(data.state)) {
-    state=data.state;
+    state=upgradeCards(data.state,random);
     if (Object.hasOwn(notes,data.difficulty)) difficulty=data.difficulty;
     if (Array.isArray(data.log)) log=data.log.filter(x=>typeof x==='string').slice(0,6);
     if (data.lastMove && Number.isInteger(data.lastMove.to) && data.lastMove.to>=0 && data.lastMove.to<=21) lastMove=data.lastMove;
+    save();
   }
 } catch { /* Start fresh if storage is unavailable or a saved game is invalid. */ }
 function random() { const bytes = new Uint32Array(1); crypto.getRandomValues(bytes); return bytes[0]/4294967296; }
@@ -30,7 +31,7 @@ function addLog(message) { log.unshift(message); log=log.slice(0,6); }
 function active() { return state.winner===null && !state.draw; }
 function render() {
   $('difficulty').value=difficulty;
-  $('mode-label').textContent=state.mode==='ultra'?'ULTRA · Coins & power-ups':'CLASSIC · No power-ups';
+  $('mode-label').textContent=state.mode==='ultra'?'ULTRA · Cards & coins':'CLASSIC · No power-ups';
   $('difficulty-note').textContent=notes[difficulty];
   $('rival-info').textContent=`Computer · ${difficulty[0].toUpperCase()+difficulty.slice(1)}`;
   const moves = state.turn===0 && !busy ? legalMoves(state) : [];
@@ -74,14 +75,14 @@ function render() {
   $('roll').disabled=!active()||state.turn!==0||state.roll!==null||busy;
   $('roll').hidden=active() && state.turn===0 && state.roll!==null && !busy && moves.length===0;
   $('pass').hidden=!(state.turn===0 && !busy && canPass(state));
-  $('pass').textContent='Skip turn →';
+  $('pass').textContent=state.extraActions?'End turn · forfeit extra actions':'Skip turn →';
   renderActions(moves);
   $('log').replaceChildren(...log.map(t=>{const li=document.createElement('li');li.textContent=t;return li;}));
   let title,detail,instruction;
   if(!active()) {
     $('turn-label').textContent='CAMPAIGN COMPLETE';
     title=state.draw?'A watchful stalemate.':state.winner===0?'Their camp is yours.':'Your camp has fallen.';
-    detail=state.draw?'300 moves. Both sides live to fight another day.':state.winner===0?'Victory. Your rival has no way to hold the camp.':'The rival found an opening. Try a different plan.';
+    detail=state.draw?'300 turns. Both sides live to fight another day.':state.winner===0?'Victory. Your rival has no way to hold the camp.':'The rival found an opening. Try a different plan.';
     instruction='Start a new game for another campaign.';
   } else if(state.turn===1 || busy) {
     $('turn-label').textContent=state.turn===1?'RIVAL’S TURN':'YOUR TURN';title=busy&&state.turn===0?'The die is cast…':'The rival is thinking…';detail=state.roll?`Rolled a ${state.roll}. Choosing a position.`:'A quiet moment before the next move.';instruction='Watch the camps. Every agent matters.';
@@ -89,7 +90,7 @@ function render() {
     $('turn-label').textContent='YOUR TURN';
     title=state.roll===null?'Make your move.':moves.length===0?'No opening this turn.':selected===null?'Choose your agent.':'Choose a destination.';
     detail=state.roll===null?moves.length?'Capture an adjacent enemy, roll to move, or skip.':'Roll the die to see your options, or skip this turn.':state.roll===6?'Six: move, capture, or skip. Returning home is optional.':`Rolled a ${state.roll}. Move to a ${state.roll} space, capture if available, or skip.`;
-    instruction=moves.length===0&&state.roll!==null?'No agent can use this roll. Pass to the rival.':selected===null?'Tap one of your agents, then a highlighted space.':`Selected: ${textPos(selected)}. Tap a gold destination. Use Capture enemy piece to capture in place; this uses your turn.`;
+    instruction=moves.length===0&&state.roll!==null?'No agent can use this roll. Pass to the rival.':selected===null?'Tap one of your agents, then a highlighted space.':`Selected: ${textPos(selected)}. Tap a gold destination. Use Capture enemy piece to capture in place; this uses one action.`;
   }
   $('status-title').textContent=title;$('status-detail').textContent=detail;$('selection').textContent=instruction;
 }
@@ -105,7 +106,7 @@ function execute(move) {
   const side=state.turn, rolled=state.roll, beforeCoins=state.mode==='ultra'?state.coins[state.turn]:0, before=state.pieces[1-side].filter(p=>p>=0).length;
   state=applyMove(state,move);lastMove={from:move.from,to:move.to};selected=null;
   const captured=state.pieces[1-side].filter(p=>p>=0).length<before;
-  addLog(move.kind==='capture' ? `${side===0?'You':'Rival'} captured the adjacent agent from ${textPos(move.from)} · turn used${rolled===null?' without rolling':''}.` : move.from===move.to ? `${side===0?'You':'Rival'} rolled 6: a home defender discovered and removed an infiltrator.` : `${side===0?'You':'Rival'} rolled ${rolled}: ${textPos(move.from)} → ${textPos(move.to)}${captured?' · captured an adjacent agent':move.to>0&&move.to<21&&state.pieces[1-side].includes(partner(move.to))?' · enemy threatened; gets a response turn before capture':''}.`);
+  addLog(move.kind==='capture' ? `${side===0?'You':'Rival'} captured the adjacent agent from ${textPos(move.from)} · action used${rolled===null?' without rolling':''}.` : move.from===move.to ? `${side===0?'You':'Rival'} rolled 6: a home defender discovered and removed an infiltrator.` : `${side===0?'You':'Rival'} rolled ${rolled}: ${textPos(move.from)} → ${textPos(move.to)}${captured?' · captured an adjacent agent':move.to>0&&move.to<21&&state.pieces[1-side].includes(partner(move.to))?' · enemy threatened; gets a response turn before capture':''}.`);
   if(state.mode==='ultra' && state.coins[side]>beforeCoins)addLog(`${side===0?'You':'Rival'} earned ${state.coins[side]-beforeCoins} coins${captured?' from capture':''}${state.pieces[side].includes(camp(1-side))?' · enemy-base income':''}.`);
   save();render();
   if(active() && state.turn===1)scheduleAI();
@@ -118,11 +119,13 @@ function scheduleAI() {
     if(state.roll===null){state=rollTurn(state,rollDie());save();}render();
     timer=setTimeout(()=>{
       if(token!==generation)return;
-      const power=choosePower(state,difficulty,random);
-      if(power){
-        state=usePower(state,power.kind,power.kind==='reroll'?rollDie():power.value);
-        addLog(`Rival used ${powerName(power.kind)}${power.value?` (${power.value})`:''}.`);save();
-        if(state.turn===0){busy=false;render();return;}
+      const decision=chooseCard(state,difficulty,random);
+      if(decision){
+        const card=(decision.type==='buy'?state.offers[1]:state.hands[1]).find(c=>c.id===decision.id);
+        if(decision.type==='buy')state=buyCard(state,card.id);
+        else state=playCard(state,card.id,card.kind==='reroll'?rollDie():decision.value);
+        addLog(`Rival ${decision.type==='buy'?'bought':'played'} ${CARDS[card.kind].name}${decision.value?` (${decision.value})`:''}.`);
+        busy=false;save();render();if(active()&&state.turn===1)scheduleAI();return;
       }
       const move=chooseMove(state,difficulty,random);busy=false;
       if(move)execute(move);
@@ -142,38 +145,65 @@ $('close-rules').addEventListener('click',()=>$('rules').close());
 $('restart').addEventListener('click',()=>{$('game-mode').value=state.mode||'classic';$('new-game').showModal();});
 $('cancel-new').addEventListener('click',()=>$('new-game').close());
 $('confirm-new').addEventListener('click',()=>{$('new-game').close();restart();});
-function restart(){generation++;clearTimeout(timer);state=initialState($('game-mode').value);selected=null;lastMove=null;busy=false;log=['The camps are quiet. You move first.'];$('die').classList.remove('rolling');save();render();$('roll').focus({preventScroll:true});}
+function restart(){generation++;clearTimeout(timer);state=initialState($('game-mode').value,random);selected=null;lastMove=null;busy=false;log=['The camps are quiet. You move first.'];$('die').classList.remove('rolling');save();render();$('roll').focus({preventScroll:true});}
 function captureMoves(moves=legalMoves(state)) {
   return moves.filter(m=>m.kind==='capture'||(m.from===m.to&&m.to===camp(state.turn)));
 }
-function powerName(kind){return {recruit:'Recruit agent',reroll:'Reroll',set:'Set your roll',sabotage:'Set enemy’s next roll'}[kind];}
 function renderActions(moves){
   const captures=captureMoves(moves), chosen=captures.find(m=>m.from===selected);
   const ready=active()&&state.turn===0&&!busy;
   $('capture').disabled=!ready||captures.length===0;
   $('capture').textContent='Capture enemy piece';
+  const waiting=(state.pendingCaptures||[]).some(c=>c.side===0&&c.waiting);
   const faceoffs=state.pieces[0].filter(p=>p>0&&p<21&&state.pieces[1].includes(partner(p)));
-  $('capture-note').textContent=!ready?'Captures use your turn.':captures.length?(chosen?`Ready at ${textPos(chosen.from)} · uses your turn.`:captures.length===1?`Ready at ${textPos(captures[0].from)} · uses your turn.`:'Choose which enemy to capture below, or select your agent.'):
-    faceoffs.length?`Face-off: roll ${[...new Set(faceoffs.map(numberOf))].join(' or ')} to countercapture at home, or move away. Red outlines alone do not mean capture is ready.`:'No capture ready. Move beside an enemy first; they get a response turn.';
+  $('capture-note').textContent=!ready?'Captures use one action.':captures.length?(chosen?`Ready at ${textPos(chosen.from)} · uses one action.`:captures.length===1?`Ready at ${textPos(captures[0].from)} · uses one action.`:'Choose which enemy to capture below, or select your agent.'):
+    waiting?'You just approached an enemy. They must get a response turn before you can capture—even with extra actions.':faceoffs.length?`Face-off: roll ${[...new Set(faceoffs.map(numberOf))].join(' or ')} to countercapture at home, or move away. Red outlines alone do not mean capture is ready.`:'No capture ready. Move beside an enemy first; they get a response turn.';
   $('capture-choices').replaceChildren();
   if(captures.length>1&&!chosen)for(const move of captures){const b=document.createElement('button');b.className='secondary';b.textContent=`Capture from ${textPos(move.from)}`;b.addEventListener('click',()=>execute(move));$('capture-choices').append(b);}
   const ultra=state.mode==='ultra';$('ultra-panel').hidden=!ultra;
   if(!ultra)return;
   $('wallet').textContent=`You: ${state.coins[0]} coins · Rival: ${state.coins[1]} coins`;
-  for(const kind of ['recruit','reroll','set','sabotage'])$('power-'+kind).disabled=!ready||!canPower(state,kind);
+  $('hand-count').textContent=`YOUR HAND · ${state.hands[0].length}/8`;
+  $('rival-cards').textContent=`Rival holds ${state.hands[1].length} card${state.hands[1].length===1?'':'s'}`;
+  $('action-count').textContent=`${state.turn===1?'Rival: ':''}${1+state.extraActions} action${state.extraActions?'s':''} available${state.bounties[0]?` · next capture +${state.bounties[0]} bonus coins`:''}`;
+  renderCards('hand-cards',state.hands[0],false,ready);
+  renderCards('shop-cards',state.offers[0],true,ready);
   const queued=state.forcedRolls.map((r,s)=>r?`${s===0?'Your':'Rival’s'} next roll is set to ${r}.`:null).filter(Boolean).join(' ');
-  $('power-note').textContent=[queued,state.rollLocked?'This roll is locked by the rival.':state.powerUsed?'Power used this turn. Move, capture, or skip.':state.roll===null?'Roll first to reroll or set your own die.':'Choose a power, or take your turn normally.'].filter(Boolean).join(' ');
+  $('power-note').textContent=[queued,state.rollLocked?'This roll is locked by the rival.':'Play as many cards as you want. Cards cost coins to buy, nothing to play.'].filter(Boolean).join(' ');
+
 }
 $('capture').addEventListener('click',()=>{
   if(!active()||busy||state.turn!==0)return;
   const captures=captureMoves(), move=captures.find(m=>m.from===selected)||(captures.length===1?captures[0]:null);
   if(move)execute(move);else $('capture-choices').querySelector('button')?.focus();
 });
-for(const kind of ['recruit','reroll','set','sabotage'])$('power-'+kind).addEventListener('click',()=>{
-  if(busy||state.turn!==0||!canPower(state,kind))return;
-  const value=kind==='reroll'?rollDie():Number($('power-face').value);
-  state=usePower(state,kind,value);selected=null;
-  addLog(`You used ${powerName(kind)}${kind==='recruit'?' · turn used':` (${value})`}.`);save();render();
-  if(active()&&state.turn===1)scheduleAI();
-});
+function renderCards(target,cards,shop,ready){
+  const container=$(target);container.replaceChildren();
+  if(!cards.length){const p=document.createElement('p');p.className='action-note';p.textContent=shop?'All offers purchased. Three new offers arrive on your next turn.':'No cards in hand. Buy a card below, or keep playing.';container.append(p);return;}
+  for(const card of cards){
+    const info=CARDS[card.kind],el=document.createElement('article');el.className=`tactic-card card-${card.kind}`;el.dataset.cardId=card.id;
+    const top=document.createElement('div');top.className='card-top';
+    const type=document.createElement('span');type.textContent=info.type;
+    const price=document.createElement('span');price.textContent=shop?`${info.cost} ◈`:'IN HAND';top.append(type,price);
+    const icon=document.createElement('div');icon.className='card-icon';icon.textContent=info.icon;icon.setAttribute('aria-hidden','true');
+    const name=document.createElement('h4');name.textContent=info.name;
+    const desc=document.createElement('p');desc.textContent=info.text;
+    const button=document.createElement('button');button.className='card-action';button.textContent=shop?`Buy ${info.name} · ${info.cost}`:`Play ${info.name}`;
+    const reason=!ready?'Wait for your turn':shop?(state.hands[0].length>=8?'Hand full':state.coins[0]<info.cost?'Not enough coins':''):cardBlock(state,card.id);
+    button.disabled=!!reason;
+    button.addEventListener('click',()=>{
+      if(!active()||busy||state.turn!==0)return;
+      if(shop){if(!canBuyCard(state,card.id))return;state=buyCard(state,card.id);addLog(`You bought ${info.name} for ${info.cost} coins.`);}
+      else {
+        if(cardBlock(state,card.id))return;
+        const value=card.kind==='reroll'?rollDie():Number($('power-face').value);
+        state=playCard(state,card.id,value);selected=null;
+        addLog(`You played ${info.name}${['set','sabotage','reroll'].includes(card.kind)?` (${value})`:''}.`);
+      }
+      save();render();if(active()&&state.turn===1)scheduleAI();
+    });
+    const note=document.createElement('span');note.className='card-reason';note.textContent=reason||(['set','sabotage'].includes(card.kind)?'Uses the chosen die face':'');
+    el.append(top,icon,name,desc,button,note);container.append(el);
+  }
+}
 render();if(active()&&state.turn===1)scheduleAI();
