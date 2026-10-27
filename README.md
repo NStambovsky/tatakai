@@ -78,3 +78,9 @@ Ultra starts both sides with 3 coins, one random card, and three distinct market
 Captures earn 3 coins. Ending your own turn with one or more infiltrators earns 1 coin, including skips. Extra actions do not pay income or refresh offers. Skipping forfeits remaining extra actions. A fresh approach cannot be captured during an extra action: the opponent still gets their response turn. Reinforcements do not sweep camp infiltrators. A victory ends immediately, regardless of extra actions.
 
 Classic is unchanged. Existing Ultra games migrate once, retaining the board, coins, and queued rolls while granting each side one starting card. Hands, offers, card IDs, bonuses, pending response windows, and extra actions are saved. All difficulties share card prices and rules. These are initial balance settings.
+
+## Desktop play area and opponent reveals
+
+Desktop uses a compact board alongside turn controls and a tabbed Hand/Market rack. Cards scroll horizontally with arrow controls and keyboard-accessible tabs. The board and core card controls fit common laptop screens, including 1280×720 with a full hand. Settings and history remain below the play area.
+
+Each opponent card play reveals the card and its actual effect for 3.2 seconds, with a Continue button and Escape support. No subsequent AI action occurs until the reveal finishes. The effect is committed once before presentation; reloading cannot replay it. A saved last-rival-card summary remains visible. Reveals fit phone screens and do not rely on animation.

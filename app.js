@@ -1,12 +1,13 @@
-import { initialState, legalMoves, applyMove, passTurn, canPass, chooseMove, validSave, camp, numberOf, sideOf, partner, rollTurn, CARDS, upgradeCards, canBuyCard, buyCard, cardBlock, playCard, chooseCard } from './engine.js?v=10';
+import { initialState, legalMoves, applyMove, passTurn, canPass, chooseMove, validSave, camp, numberOf, sideOf, partner, rollTurn, CARDS, upgradeCards, canBuyCard, buyCard, cardBlock, playCard, chooseCard } from './engine.js?v=11';
 const $ = id => document.getElementById(id);
 const KEY = 'tatakai-v4';
 let state = initialState(), difficulty = 'medium', selected = null, busy = false, lastMove = null, timer = null, generation = 0;
+let cardTab='hand', rivalCard=null, revealDone=null;
 let log = ['The camps are quiet. You move first.'];
 const notes = {easy:'Explores freely. A gentle opponent for learning the board.',medium:'Looks for captures and keeps an eye on camp.',hard:'Plans around your best reply across all six possible rolls.'};
 const dice = ['?', '⚀','⚁','⚂','⚃','⚄','⚅'];
 function save() {
-  try { localStorage.setItem(KEY,JSON.stringify({state,difficulty,log,lastMove})); }
+  try { localStorage.setItem(KEY,JSON.stringify({state,difficulty,log,lastMove,rivalCard})); }
   catch { $('save-note').textContent='Saving is unavailable. Keep this tab open to continue.'; }
 }
 try {
@@ -16,6 +17,7 @@ try {
     if (Object.hasOwn(notes,data.difficulty)) difficulty=data.difficulty;
     if (Array.isArray(data.log)) log=data.log.filter(x=>typeof x==='string').slice(0,6);
     if (data.lastMove && Number.isInteger(data.lastMove.to) && data.lastMove.to>=0 && data.lastMove.to<=21) lastMove=data.lastMove;
+    if(data.rivalCard&&Object.hasOwn(CARDS,data.rivalCard.kind)&&typeof data.rivalCard.effect==='string')rivalCard=data.rivalCard;
     save();
   }
 } catch { /* Start fresh if storage is unavailable or a saved game is invalid. */ }
@@ -31,6 +33,8 @@ function addLog(message) { log.unshift(message); log=log.slice(0,6); }
 function active() { return state.winner===null && !state.draw; }
 function render() {
   $('difficulty').value=difficulty;
+  $('rival-card-summary').hidden=!rivalCard;
+  $('rival-card-summary').textContent=rivalCard?`Last rival card: ${CARDS[rivalCard.kind].name} · ${rivalCard.effect}`:'';
   $('mode-label').textContent=state.mode==='ultra'?'ULTRA · Cards & coins':'CLASSIC · No power-ups';
   $('difficulty-note').textContent=notes[difficulty];
   $('rival-info').textContent=`Computer · ${difficulty[0].toUpperCase()+difficulty.slice(1)}`;
@@ -122,10 +126,15 @@ function scheduleAI() {
       const decision=chooseCard(state,difficulty,random);
       if(decision){
         const card=(decision.type==='buy'?state.offers[1]:state.hands[1]).find(c=>c.id===decision.id);
-        if(decision.type==='buy')state=buyCard(state,card.id);
-        else state=playCard(state,card.id,card.kind==='reroll'?rollDie():decision.value);
-        addLog(`Rival ${decision.type==='buy'?'bought':'played'} ${CARDS[card.kind].name}${decision.value?` (${decision.value})`:''}.`);
-        busy=false;save();render();if(active()&&state.turn===1)scheduleAI();return;
+        if(decision.type==='buy'){
+          state=buyCard(state,card.id);addLog(`Rival bought ${CARDS[card.kind].name}.`);
+          busy=false;save();render();if(active()&&state.turn===1)scheduleAI();return;
+        }
+        const value=card.kind==='reroll'?rollDie():decision.value;
+        state=playCard(state,card.id,value);
+        rivalCard={kind:card.kind,effect:cardEffect(card.kind,value)};
+        addLog(`Rival played ${CARDS[card.kind].name}: ${rivalCard.effect}`);
+        save();render();showRivalCard(token);return;
       }
       const move=chooseMove(state,difficulty,random);busy=false;
       if(move)execute(move);
@@ -145,7 +154,7 @@ $('close-rules').addEventListener('click',()=>$('rules').close());
 $('restart').addEventListener('click',()=>{$('game-mode').value=state.mode||'classic';$('new-game').showModal();});
 $('cancel-new').addEventListener('click',()=>$('new-game').close());
 $('confirm-new').addEventListener('click',()=>{$('new-game').close();restart();});
-function restart(){generation++;clearTimeout(timer);state=initialState($('game-mode').value,random);selected=null;lastMove=null;busy=false;log=['The camps are quiet. You move first.'];$('die').classList.remove('rolling');save();render();$('roll').focus({preventScroll:true});}
+function restart(){generation++;clearTimeout(timer);revealDone=null;$('card-reveal').close();rivalCard=null;cardTab='hand';state=initialState($('game-mode').value,random);selected=null;lastMove=null;busy=false;log=['The camps are quiet. You move first.'];$('die').classList.remove('rolling');save();render();$('roll').focus({preventScroll:true});}
 function captureMoves(moves=legalMoves(state)) {
   return moves.filter(m=>m.kind==='capture'||(m.from===m.to&&m.to===camp(state.turn)));
 }
@@ -163,13 +172,15 @@ function renderActions(moves){
   const ultra=state.mode==='ultra';$('ultra-panel').hidden=!ultra;
   if(!ultra)return;
   $('wallet').textContent=`You: ${state.coins[0]} coins · Rival: ${state.coins[1]} coins`;
-  $('hand-count').textContent=`YOUR HAND · ${state.hands[0].length}/8`;
+  $('hand-tab').textContent=`Your hand (${state.hands[0].length}/8)`;
+  $('market-tab').textContent=`Market (${state.offers[0].length})`;
   $('rival-cards').textContent=`Rival holds ${state.hands[1].length} card${state.hands[1].length===1?'':'s'}`;
   $('action-count').textContent=`${state.turn===1?'Rival: ':''}${1+state.extraActions} action${state.extraActions?'s':''} available${state.bounties[0]?` · next capture +${state.bounties[0]} bonus coins`:''}`;
+  renderCardTabs();
   renderCards('hand-cards',state.hands[0],false,ready);
   renderCards('shop-cards',state.offers[0],true,ready);
   const queued=state.forcedRolls.map((r,s)=>r?`${s===0?'Your':'Rival’s'} next roll is set to ${r}.`:null).filter(Boolean).join(' ');
-  $('power-note').textContent=[queued,state.rollLocked?'This roll is locked by the rival.':'Play as many cards as you want. Cards cost coins to buy, nothing to play.'].filter(Boolean).join(' ');
+  $('power-note').textContent=[queued,state.rollLocked?'This roll is locked by the rival.':'Loaded Die and False Orders use the chosen die face.'].filter(Boolean).join(' ');
 
 }
 $('capture').addEventListener('click',()=>{
@@ -178,7 +189,7 @@ $('capture').addEventListener('click',()=>{
   if(move)execute(move);else $('capture-choices').querySelector('button')?.focus();
 });
 function renderCards(target,cards,shop,ready){
-  const container=$(target);container.replaceChildren();
+  const container=$(target),scroll=container.scrollLeft;container.replaceChildren();
   if(!cards.length){const p=document.createElement('p');p.className='action-note';p.textContent=shop?'All offers purchased. Three new offers arrive on your next turn.':'No cards in hand. Buy a card below, or keep playing.';container.append(p);return;}
   for(const card of cards){
     const info=CARDS[card.kind],el=document.createElement('article');el.className=`tactic-card card-${card.kind}`;el.dataset.cardId=card.id;
@@ -205,5 +216,32 @@ function renderCards(target,cards,shop,ready){
     const note=document.createElement('span');note.className='card-reason';note.textContent=reason||(['set','sabotage'].includes(card.kind)?'Uses the chosen die face':'');
     el.append(top,icon,name,desc,button,note);container.append(el);
   }
+  container.scrollLeft=scroll;
 }
+function renderCardTabs(){
+  for(const name of ['hand','market']){const on=cardTab===name;$(name+'-tab').setAttribute('aria-selected',String(on));$(name+'-tab').tabIndex=on?0:-1;$(name+'-panel').hidden=!on;}
+  $('card-help').textContent=cardTab==='hand'?'Play any number of cards. More cards →':'Three offers per turn. Buy now, play or hold. More cards →';
+}
+for(const name of ['hand','market']){
+  $(name+'-tab').addEventListener('click',()=>{cardTab=name;renderCardTabs();});
+  $(name+'-tab').addEventListener('keydown',e=>{if(['ArrowLeft','ArrowRight','Home','End'].includes(e.key)){e.preventDefault();cardTab=e.key==='Home'?'hand':e.key==='End'?'market':cardTab==='hand'?'market':'hand';renderCardTabs();$(cardTab+'-tab').focus();}});
+}
+for(const [id,direction] of [['cards-prev',-1],['cards-next',1]])$(id).addEventListener('click',()=>{
+  const rack=$(cardTab==='hand'?'hand-cards':'shop-cards');rack.scrollBy({left:direction*Math.max(180,rack.clientWidth*.8),behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});
+});
+function cardEffect(kind,value){return {
+  grant:'Rival gained 4 coins.',extra:'Rival gained one extra action.',bounty:'Their next capture earns 3 extra coins.',
+  draw:'Rival drew 2 cards.',recruit:'A new rival agent arrived in their camp.',
+  reroll:`Rival rerolled to ${value}.`,set:`Rival set their die to ${value}.`,sabotage:`Your next roll is locked to ${value}.`
+}[kind];}
+function showRivalCard(token){
+  busy=true;
+  const info=CARDS[rivalCard.kind];$('reveal-icon').textContent=info.icon;$('reveal-title').textContent=info.name;
+  $('reveal-description').textContent=info.text;$('reveal-effect').textContent=rivalCard.effect;
+  const dialog=$('card-reveal');if(!dialog.open)dialog.showModal();
+  revealDone=()=>{if(token!==generation)return;revealDone=null;clearTimeout(timer);dialog.close();busy=false;render();if(active()&&state.turn===1)scheduleAI();else $('roll').focus({preventScroll:true});};
+  timer=setTimeout(()=>revealDone?.(),3200);
+}
+$('reveal-continue').addEventListener('click',()=>revealDone?.());
+$('card-reveal').addEventListener('cancel',e=>{e.preventDefault();revealDone?.();});
 render();if(active()&&state.turn===1)scheduleAI();
