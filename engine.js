@@ -67,8 +67,12 @@ export function applyMove(state, move, roll = state.roll) {
   next.roll = null;
   return next;
 }
+export function canPass(state) {
+  return state.winner === null && !state.draw && Number.isInteger(state.roll) && state.roll >= 1 && state.roll <= 6 &&
+    (state.roll === 6 || legalMoves(state).length === 0);
+}
 export function passTurn(state) {
-  if (state.roll === null || legalMoves(state).length) throw new Error('Cannot pass while a legal move exists');
+  if (!canPass(state)) throw new Error('Cannot skip this turn');
   const next = structuredClone(state);
   next.turn = 1-next.turn; next.roll = null; next.ply++;
   next.draw = next.ply >= 300;
@@ -103,9 +107,10 @@ function expectedReply(state, side) {
   let sum = 0;
   for (let roll = 1; roll <= 6; roll++) {
     const moves = legalMoves(state,roll);
-    if (!moves.length) { sum += evaluate(state,side); continue; }
+    if (!moves.length) { sum += evaluate(passTurn({...state,roll}),side); continue; }
     // The next player chooses their strongest response for each possible roll.
     const vals = moves.map(m => evaluate(applyMove(state,m,roll),side));
+    if (roll === 6) vals.push(evaluate(passTurn({...state,roll}),side));
     sum += state.turn === side ? Math.max(...vals) : Math.min(...vals);
   }
   return sum/6;
@@ -115,10 +120,11 @@ export function chooseMove(state, difficulty = 'medium', random = Math.random) {
   if (!moves.length) return null;
   const immediate = moves.filter(m => applyMove(state,m).winner === state.turn);
   if (immediate.length) return immediate[Math.floor(random()*immediate.length)];
+  if (state.roll === 6) moves.push(null); // Optional skip competes with moving.
   if (difficulty === 'easy') return moves[Math.floor(random()*moves.length)];
   let best = -Infinity, choices = [];
   for (const move of moves) {
-    const next = applyMove(state,move);
+    const next = move ? applyMove(state,move) : passTurn(state);
     const score = difficulty === 'hard' ? expectedReply(next,state.turn) : evaluate(next,state.turn);
     if (score > best + 0.001) { best=score; choices=[move]; }
     else if (Math.abs(score-best) < 0.001) choices.push(move);

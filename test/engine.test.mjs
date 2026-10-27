@@ -83,3 +83,20 @@ test('capture cannot be forged and ended games offer no captures',()=>{
   assert.throws(()=>applyMove(s,{piece:5,from:17,to:17,kind:'capture'}));
   s.draw=true;assert.deepEqual(legalMoves(s),[]);
 });
+
+test('six skip keeps every piece in place and consumes exactly one turn',()=>{
+ for(const side of [0,1]){const s=initialState();s.turn=side;s.roll=6;s.pieces[side][0]=side===0?17:3;
+ assert.ok(legalMoves(s).length);const n=passTurn(s);assert.deepEqual(n.pieces,s.pieces);assert.equal(n.turn,1-side);assert.equal(n.roll,null);assert.equal(n.ply,1);assert.equal(s.ply,0);assert.ok(validSave(n));}
+});
+test('skip is forbidden before rolling, on playable numbered rolls, and after game end',()=>{
+ const s=initialState();assert.throws(()=>passTurn(s));s.roll=4;assert.throws(()=>passTurn(s));s.roll=6;s.draw=true;assert.throws(()=>passTurn(s));s.draw=false;s.winner=0;assert.throws(()=>passTurn(s));
+});
+test('AI can skip six rather than break a protected home pair',()=>{
+ const s=setup([21,21,21,21,17,18],[0,0,0,0,0,0],6);
+ for(const d of ['easy','medium','hard'])assert.equal(chooseMove(s,d,()=>.9999),null);
+});
+test('skipping a six retains adjacent threats and observes the turn limit',()=>{
+ const s=setup([21,21,21,21,21,17],[0,0,0,0,0,18],6);s.ply=298;
+ const n=passTurn(s);assert.ok(legalMoves(n).some(m=>m.kind==='capture'));assert.deepEqual(n.pieces,s.pieces);
+ n.roll=6;const end=passTurn(n);assert.equal(end.ply,300);assert.equal(end.draw,true);assert.ok(validSave(end));
+});
