@@ -57,3 +57,9 @@ On every turn, before or after rolling any number, either player may skip instea
 ## Separate approach and capture turns
 
 Both halves now require an approach turn before capture. Pending approaches persist in saves and clear when either agent leaves the row. Existing saves remain compatible. Camp defence remains unchanged.
+
+## Capture control and Ultra mode
+
+Capture enemy piece is a separate button below Roll and Skip. It executes a sole eligible capture or the selected agent's capture; multiple candidates get labeled target buttons. Face-offs without a legal capture explain the needed roll.
+
+Choose Classic or Ultra in New game. Existing saves load as Classic and retain the board. Ultra starts both sides at 3 coins; actual captures earn 3 and ending your own turn with one or more agents in the enemy camp earns 1 (including skips). Coins reset each game. Reroll costs 2, set your current die costs 4, queue the enemy's next die costs 5, and recruit at home costs 6. One power per turn; recruiting ends the turn, with at most 8 living agents. Other powers precede the normal move/capture/skip. Forced enemy rolls cannot be rerolled or replaced and remain queued through skips without rolling. Recruitment does not sweep infiltrators. All three AI levels share the same prices, limits, earnings, and powers. These are initial balance settings, not a claim of competitive balance.

@@ -1,4 +1,4 @@
-import { initialState, legalMoves, applyMove, passTurn, canPass, chooseMove, validSave, camp, numberOf, sideOf, partner } from './engine.js?v=7';
+import { initialState, legalMoves, applyMove, passTurn, canPass, chooseMove, validSave, camp, numberOf, sideOf, partner, rollTurn, canPower, usePower, choosePower } from './engine.js?v=8';
 const $ = id => document.getElementById(id);
 const KEY = 'tatakai-v4';
 let state = initialState(), difficulty = 'medium', selected = null, busy = false, lastMove = null, timer = null, generation = 0;
@@ -30,6 +30,7 @@ function addLog(message) { log.unshift(message); log=log.slice(0,6); }
 function active() { return state.winner===null && !state.draw; }
 function render() {
   $('difficulty').value=difficulty;
+  $('mode-label').textContent=state.mode==='ultra'?'ULTRA · Coins & power-ups':'CLASSIC · No power-ups';
   $('difficulty-note').textContent=notes[difficulty];
   $('rival-info').textContent=`Computer · ${difficulty[0].toUpperCase()+difficulty.slice(1)}`;
   const moves = state.turn===0 && !busy ? legalMoves(state) : [];
@@ -74,6 +75,7 @@ function render() {
   $('roll').hidden=active() && state.turn===0 && state.roll!==null && !busy && moves.length===0;
   $('pass').hidden=!(state.turn===0 && !busy && canPass(state));
   $('pass').textContent='Skip turn →';
+  renderActions(moves);
   $('log').replaceChildren(...log.map(t=>{const li=document.createElement('li');li.textContent=t;return li;}));
   let title,detail,instruction;
   if(!active()) {
@@ -87,7 +89,7 @@ function render() {
     $('turn-label').textContent='YOUR TURN';
     title=state.roll===null?'Make your move.':moves.length===0?'No opening this turn.':selected===null?'Choose your agent.':'Choose a destination.';
     detail=state.roll===null?moves.length?'Capture an adjacent enemy, roll to move, or skip.':'Roll the die to see your options, or skip this turn.':state.roll===6?'Six: move, capture, or skip. Returning home is optional.':`Rolled a ${state.roll}. Move to a ${state.roll} space, capture if available, or skip.`;
-    instruction=moves.length===0&&state.roll!==null?'No agent can use this roll. Pass to the rival.':selected===null?'Tap one of your agents, then a highlighted space.':`Selected: ${textPos(selected)}. Tap a gold destination. Tap your selected agent again if highlighted to capture in place; this uses your turn.`;
+    instruction=moves.length===0&&state.roll!==null?'No agent can use this roll. Pass to the rival.':selected===null?'Tap one of your agents, then a highlighted space.':`Selected: ${textPos(selected)}. Tap a gold destination. Use Capture enemy piece to capture in place; this uses your turn.`;
   }
   $('status-title').textContent=title;$('status-detail').textContent=detail;$('selection').textContent=instruction;
 }
@@ -100,10 +102,11 @@ function handleCell(pos) {
   if(selected!==null){const dest=document.querySelector('.available');dest?.focus({preventScroll:true});}
 }
 function execute(move) {
-  const side=state.turn, rolled=state.roll, before=state.pieces[1-side].filter(p=>p>=0).length;
+  const side=state.turn, rolled=state.roll, beforeCoins=state.mode==='ultra'?state.coins[state.turn]:0, before=state.pieces[1-side].filter(p=>p>=0).length;
   state=applyMove(state,move);lastMove={from:move.from,to:move.to};selected=null;
   const captured=state.pieces[1-side].filter(p=>p>=0).length<before;
   addLog(move.kind==='capture' ? `${side===0?'You':'Rival'} captured the adjacent agent from ${textPos(move.from)} · turn used${rolled===null?' without rolling':''}.` : move.from===move.to ? `${side===0?'You':'Rival'} rolled 6: a home defender discovered and removed an infiltrator.` : `${side===0?'You':'Rival'} rolled ${rolled}: ${textPos(move.from)} → ${textPos(move.to)}${captured?' · captured an adjacent agent':move.to>0&&move.to<21&&state.pieces[1-side].includes(partner(move.to))?' · enemy threatened; gets a response turn before capture':''}.`);
+  if(state.mode==='ultra' && state.coins[side]>beforeCoins)addLog(`${side===0?'You':'Rival'} earned ${state.coins[side]-beforeCoins} coins${captured?' from capture':''}${state.pieces[side].includes(camp(1-side))?' · enemy-base income':''}.`);
   save();render();
   if(active() && state.turn===1)scheduleAI();
   else if(state.turn===0 && active())$('roll').focus({preventScroll:true});
@@ -112,9 +115,15 @@ function scheduleAI() {
   busy=true;render(); const token=generation;
   timer=setTimeout(()=>{
     if(token!==generation)return;
-    if(state.roll===null){state.roll=rollDie();save();}render();
+    if(state.roll===null){state=rollTurn(state,rollDie());save();}render();
     timer=setTimeout(()=>{
       if(token!==generation)return;
+      const power=choosePower(state,difficulty,random);
+      if(power){
+        state=usePower(state,power.kind,power.kind==='reroll'?rollDie():power.value);
+        addLog(`Rival used ${powerName(power.kind)}${power.value?` (${power.value})`:''}.`);save();
+        if(state.turn===0){busy=false;render();return;}
+      }
       const move=chooseMove(state,difficulty,random);busy=false;
       if(move)execute(move);
       else{addLog(`Rival rolled ${state.roll}: skipped the turn.`);state=passTurn(state);selected=null;save();render();}
@@ -124,14 +133,47 @@ function scheduleAI() {
 $('roll').addEventListener('click',()=>{
   if(busy || state.turn!==0 || state.roll!==null || !active())return;
   busy=true;render();$('die').classList.add('rolling');const token=generation;
-  timer=setTimeout(()=>{if(token!==generation)return;state.roll=rollDie();busy=false;$('die').classList.remove('rolling');save();render();},400);
+  timer=setTimeout(()=>{if(token!==generation)return;state=rollTurn(state,rollDie());busy=false;$('die').classList.remove('rolling');save();render();},400);
 });
 $('pass').addEventListener('click',()=>{if(state.turn!==0||busy||!canPass(state))return;addLog(`You skipped the turn${state.roll===null?' without rolling':` after rolling ${state.roll}`}.`);state=passTurn(state);selected=null;save();render();if(active())scheduleAI();});
 $('difficulty').addEventListener('change',()=>{difficulty=$('difficulty').value;save();render();});
 $('help').addEventListener('click',()=>$('rules').showModal());
 $('close-rules').addEventListener('click',()=>$('rules').close());
-$('restart').addEventListener('click',()=>{if(active() && (state.ply>0 || state.roll!==null))$('new-game').showModal();else restart();});
+$('restart').addEventListener('click',()=>{$('game-mode').value=state.mode||'classic';$('new-game').showModal();});
 $('cancel-new').addEventListener('click',()=>$('new-game').close());
 $('confirm-new').addEventListener('click',()=>{$('new-game').close();restart();});
-function restart(){generation++;clearTimeout(timer);state=initialState();selected=null;lastMove=null;busy=false;log=['The camps are quiet. You move first.'];$('die').classList.remove('rolling');save();render();$('roll').focus({preventScroll:true});}
+function restart(){generation++;clearTimeout(timer);state=initialState($('game-mode').value);selected=null;lastMove=null;busy=false;log=['The camps are quiet. You move first.'];$('die').classList.remove('rolling');save();render();$('roll').focus({preventScroll:true});}
+function captureMoves(moves=legalMoves(state)) {
+  return moves.filter(m=>m.kind==='capture'||(m.from===m.to&&m.to===camp(state.turn)));
+}
+function powerName(kind){return {recruit:'Recruit agent',reroll:'Reroll',set:'Set your roll',sabotage:'Set enemy’s next roll'}[kind];}
+function renderActions(moves){
+  const captures=captureMoves(moves), chosen=captures.find(m=>m.from===selected);
+  const ready=active()&&state.turn===0&&!busy;
+  $('capture').disabled=!ready||captures.length===0;
+  $('capture').textContent='Capture enemy piece';
+  const faceoffs=state.pieces[0].filter(p=>p>0&&p<21&&state.pieces[1].includes(partner(p)));
+  $('capture-note').textContent=!ready?'Captures use your turn.':captures.length?(chosen?`Ready at ${textPos(chosen.from)} · uses your turn.`:captures.length===1?`Ready at ${textPos(captures[0].from)} · uses your turn.`:'Choose which enemy to capture below, or select your agent.'):
+    faceoffs.length?`Face-off: roll ${[...new Set(faceoffs.map(numberOf))].join(' or ')} to countercapture at home, or move away. Red outlines alone do not mean capture is ready.`:'No capture ready. Move beside an enemy first; they get a response turn.';
+  $('capture-choices').replaceChildren();
+  if(captures.length>1&&!chosen)for(const move of captures){const b=document.createElement('button');b.className='secondary';b.textContent=`Capture from ${textPos(move.from)}`;b.addEventListener('click',()=>execute(move));$('capture-choices').append(b);}
+  const ultra=state.mode==='ultra';$('ultra-panel').hidden=!ultra;
+  if(!ultra)return;
+  $('wallet').textContent=`You: ${state.coins[0]} coins · Rival: ${state.coins[1]} coins`;
+  for(const kind of ['recruit','reroll','set','sabotage'])$('power-'+kind).disabled=!ready||!canPower(state,kind);
+  const queued=state.forcedRolls.map((r,s)=>r?`${s===0?'Your':'Rival’s'} next roll is set to ${r}.`:null).filter(Boolean).join(' ');
+  $('power-note').textContent=[queued,state.rollLocked?'This roll is locked by the rival.':state.powerUsed?'Power used this turn. Move, capture, or skip.':state.roll===null?'Roll first to reroll or set your own die.':'Choose a power, or take your turn normally.'].filter(Boolean).join(' ');
+}
+$('capture').addEventListener('click',()=>{
+  if(!active()||busy||state.turn!==0)return;
+  const captures=captureMoves(), move=captures.find(m=>m.from===selected)||(captures.length===1?captures[0]:null);
+  if(move)execute(move);else $('capture-choices').querySelector('button')?.focus();
+});
+for(const kind of ['recruit','reroll','set','sabotage'])$('power-'+kind).addEventListener('click',()=>{
+  if(busy||state.turn!==0||!canPower(state,kind))return;
+  const value=kind==='reroll'?rollDie():Number($('power-face').value);
+  state=usePower(state,kind,value);selected=null;
+  addLog(`You used ${powerName(kind)}${kind==='recruit'?' · turn used':` (${value})`}.`);save();render();
+  if(active()&&state.turn===1)scheduleAI();
+});
 render();if(active()&&state.turn===1)scheduleAI();

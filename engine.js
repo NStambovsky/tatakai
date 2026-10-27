@@ -4,8 +4,9 @@ export const camp = side => side === 0 ? 21 : 0;
 export const sideOf = pos => pos <= 10 ? 1 : 0;
 export const numberOf = pos => pos === 0 || pos === 21 ? 6 : pos <= 10 ? 6 - Math.ceil(pos/2) : Math.ceil((pos-10)/2);
 export const partner = pos => pos % 2 === 1 ? pos+1 : pos-1;
-export function initialState() {
-  return {version: VERSION, pieces: [Array(6).fill(21), Array(6).fill(0)], turn: 0, roll: null, ply: 0, winner: null, draw: false};
+export function initialState(mode = 'classic') {
+  if (!['classic','ultra'].includes(mode)) throw new Error('Unknown mode');
+  return {version: VERSION, mode, coins:[3,3], forcedRolls:[null,null], powerUsed:false, rollLocked:false, pieces: [Array(6).fill(21), Array(6).fill(0)], turn: 0, roll: null, ply: 0, winner: null, draw: false};
 }
 export function outcome(state) {
   for (const side of [0, 1]) {
@@ -67,11 +68,16 @@ export function applyMove(state, move, roll = state.roll) {
   if (to > 0 && to < 21 && allowed.from !== to && next.pieces[enemy].includes(partner(to))) {
     next.pendingCaptures.push({side, from: to});
   }
+  if (next.mode === 'ultra') {
+    const captured = state.pieces[enemy].filter(p=>p>=0).length - next.pieces[enemy].filter(p=>p>=0).length;
+    next.coins[side] += captured * 3;
+  }
   next.ply++;
   next.winner = outcome(next);
   next.draw = next.winner === null && next.ply >= 300;
   next.turn = enemy;
   next.roll = null;
+  finishEconomy(next, side);
   return next;
 }
 export function canPass(state) {
@@ -82,6 +88,7 @@ export function passTurn(state) {
   const next = structuredClone(state);
   next.turn = 1-next.turn; next.roll = null; next.ply++;
   next.draw = next.ply >= 300;
+  finishEconomy(next, state.turn);
   return next;
 }
 export function evaluate(state, side) {
@@ -92,12 +99,13 @@ export function evaluate(state, side) {
     const own = state.pieces[s], enemies = state.pieces[1-s];
     const home = own.filter(p => p === camp(s)).length;
     const invaders = own.filter(p => p === camp(1-s)).length;
-    let value = own.filter(p => p >= 0).length * 36;
+    let value = (state.mode === 'ultra' ? state.coins[s] * 2 : 0) + own.filter(p => p >= 0).length * 36;
     value += home > 0 ? 15 : -28;
     value += invaders * 24;
     if (invaders) value += Math.max(0, 6-enemies.filter(p => p === camp(1-s)).length) * 6;
     const positions = [...new Set(own.filter(p => p > 0 && p < 21))];
     for (const pos of positions) value += own.includes(pos % 2 === 1 ? pos+1 : pos-1) ? 9 : -2;
+    value += positions.length * 4; // Deployment should beat endless opening skips.
     // Advancing enables a six; mixed rows favor the side with a pending capture.
     value += positions.filter(p => sideOf(p) !== s).length * 5;
     for (const pos of positions) if (enemies.includes(partner(pos))) {
@@ -111,7 +119,8 @@ export function evaluate(state, side) {
 function expectedReply(state, side) {
   if (state.winner !== null || state.draw) return evaluate(state,side);
   let sum = 0;
-  for (let roll = 1; roll <= 6; roll++) {
+  const rolls = state.mode === 'ultra' && state.forcedRolls[state.turn] ? [state.forcedRolls[state.turn]] : [1,2,3,4,5,6];
+  for (const roll of rolls) {
     const moves = legalMoves(state,roll);
     if (!moves.length) { sum += evaluate(passTurn({...state,roll}),side); continue; }
     // The next player chooses their strongest response for each possible roll.
@@ -119,7 +128,7 @@ function expectedReply(state, side) {
     vals.push(evaluate(passTurn({...state,roll}),side));
     sum += state.turn === side ? Math.max(...vals) : Math.min(...vals);
   }
-  return sum/6;
+  return sum/rolls.length;
 }
 export function chooseMove(state, difficulty = 'medium', random = Math.random) {
   const moves = legalMoves(state);
@@ -142,10 +151,81 @@ export function validSave(s) {
     (s.roll === null || (Number.isInteger(s.roll) && s.roll>=1 && s.roll<=6)) &&
     Number.isInteger(s.ply) && s.ply>=0 && s.ply<=300 &&
     [null,0,1].includes(s.winner) && typeof s.draw==='boolean' &&
-    Array.isArray(s.pieces) && s.pieces.length===2 && s.pieces.every(a => Array.isArray(a) && a.length===6 && a.every(p => Number.isInteger(p) && p>=-1 && p<=21)) &&
+    Array.isArray(s.pieces) && s.pieces.length===2 && s.pieces.every(a => Array.isArray(a) && a.length>=6 && a.length<=(s.mode==='ultra'?8:6) && a.every(p => Number.isInteger(p) && p>=-1 && p<=21)) &&
+    (s.mode === undefined || ['classic','ultra'].includes(s.mode)) &&
+    (s.mode !== 'ultra' || (Array.isArray(s.coins) && s.coins.length===2 && s.coins.every(c=>Number.isInteger(c)&&c>=0&&c<=2000) &&
+      Array.isArray(s.forcedRolls) && s.forcedRolls.length===2 && s.forcedRolls.every(r=>r===null||(Number.isInteger(r)&&r>=1&&r<=6)) &&
+      typeof s.powerUsed==='boolean' && typeof s.rollLocked==='boolean' && (!s.rollLocked || s.roll!==null))) &&
     (s.pendingCaptures === undefined || (Array.isArray(s.pendingCaptures) && s.pendingCaptures.length <= 10 && s.pendingCaptures.every(c =>
       c && [0,1].includes(c.side) && Number.isInteger(c.from) && c.from > 0 && c.from < 21 &&
       s.pieces[c.side].includes(c.from) && s.pieces[1-c.side].includes(partner(c.from))))) &&
     s.winner === outcome(s) && s.draw === (s.winner === null && s.ply >= 300) &&
     !Array.from({length:20},(_,i)=>i+1).some(p => s.pieces.flat().filter(x=>x===p).length>1);
+}
+
+export const POWER_COSTS = {recruit:6, reroll:2, set:4, sabotage:5};
+function finishEconomy(state, side) {
+  if (state.mode !== 'ultra') return;
+  // Pay once at the end of the owner's turn, regardless of infiltrator count.
+  if (state.pieces[side].includes(camp(1-side))) state.coins[side]++;
+  state.powerUsed=false;state.rollLocked=false;
+}
+export function rollTurn(state, value) {
+  if (!canPass(state) || state.roll !== null || !Number.isInteger(value) || value<1 || value>6) throw new Error('Cannot roll');
+  const next=structuredClone(state);
+  const forced=state.mode==='ultra'?state.forcedRolls[state.turn]:null;
+  next.roll=forced ?? value;
+  if(next.mode==='ultra'){next.rollLocked=forced!==null;next.forcedRolls[state.turn]=null;}
+  return next;
+}
+export function canPower(state, kind) {
+  if(state.mode!=='ultra'||!canPass(state)||state.powerUsed||!Object.hasOwn(POWER_COSTS,kind)||state.coins[state.turn]<POWER_COSTS[kind])return false;
+  if(kind==='recruit')return state.pieces[state.turn].filter(p=>p>=0).length<8;
+  if(kind==='sabotage')return state.forcedRolls[1-state.turn]===null;
+  return state.roll!==null&&!state.rollLocked;
+}
+export function usePower(state, kind, value) {
+  if(!canPower(state,kind))throw new Error('Power unavailable');
+  if(kind!=='recruit'&&(!Number.isInteger(value)||value<1||value>6))throw new Error('Choose a die face');
+  let next=structuredClone(state);const side=state.turn;
+  next.coins[side]-=POWER_COSTS[kind];next.powerUsed=true;
+  if(kind==='recruit'){
+    const index=next.pieces[side].indexOf(-1);
+    if(index>=0)next.pieces[side][index]=camp(side);else next.pieces[side].push(camp(side));
+    // Reinforcements arrive at home; they do not sweep infiltrators.
+    next=passTurn(next);
+  } else if(kind==='sabotage')next.forcedRolls[1-side]=value;
+  else next.roll=value;
+  return next;
+}
+function bestTurnValue(state, side) {
+  if(state.turn!==side||!canPass(state))return evaluate(state,side);
+  return Math.max(evaluate(passTurn(state),side),...legalMoves(state).map(m=>evaluate(applyMove(state,m),side)));
+}
+export function choosePower(state, difficulty='medium', random=Math.random) {
+  if(state.mode!=='ultra'||state.powerUsed||!canPass(state))return null;
+  if(legalMoves(state).some(m=>applyMove(state,m).winner===state.turn))return null;
+  const options=[];
+  if(canPower(state,'recruit'))options.push({kind:'recruit'});
+  if(canPower(state,'reroll'))options.push({kind:'reroll'});
+  for(let value=1;value<=6;value++)for(const kind of ['set','sabotage'])if(canPower(state,kind))options.push({kind,value});
+  if(!options.length)return null;
+  if(difficulty==='easy')return random()<.4?options[Math.floor(random()*options.length)]:null;
+  const side=state.turn, base=bestTurnValue(state,side);
+  let best=base+1, choice=null;
+  for(const option of options){
+    let score;
+    if(option.kind==='reroll')score=[1,2,3,4,5,6].reduce((sum,v)=>sum+bestTurnValue(usePower(state,'reroll',v),side),0)/6;
+    else {
+      const next=usePower(state,option.kind,option.value);
+      score=bestTurnValue(next,side);
+      if(option.kind==='sabotage'){
+        const passed=passTurn(next);
+        // Value denying an opponent their best roll, allowing them to skip.
+        score+=expectedReply(passed,side)-expectedReply(passTurn(state),side);
+      }
+    }
+    if(score>best){best=score;choice=option;}
+  }
+  return choice;
 }
