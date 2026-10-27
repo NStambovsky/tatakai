@@ -157,7 +157,7 @@ function renderActions(moves){
   const waiting=(state.pendingCaptures||[]).some(c=>c.side===0&&c.waiting);
   const faceoffs=state.pieces[0].filter(p=>p>0&&p<21&&state.pieces[1].includes(partner(p)));
   $('capture-note').textContent=!ready?'Captures use one action.':captures.length?(chosen?`Ready at ${textPos(chosen.from)} · uses one action.`:captures.length===1?`Ready at ${textPos(captures[0].from)} · uses one action.`:'Choose which enemy to capture below, or select your agent.'):
-    waiting?'You just approached an enemy. They must get a response turn before you can capture—even with extra actions.':faceoffs.length?`Face-off: roll ${[...new Set(faceoffs.map(numberOf))].join(' or ')} to countercapture at home, or move away. Red outlines alone do not mean capture is ready.`:'No capture ready. Move beside an enemy first; they get a response turn.';
+    waiting?'You just approached an enemy. They must get a response turn before you can capture—even with extra actions.':faceoffs.length?'The home agent gets first response without rolling. The arriving agent must wait until the opponent has had a turn.':'No capture ready. Move beside an enemy first; they get a response turn.';
   $('capture-choices').replaceChildren();
   if(captures.length>1&&!chosen)for(const move of captures){const b=document.createElement('button');b.className='secondary';b.textContent=`Capture from ${textPos(move.from)}`;b.addEventListener('click',()=>execute(move));$('capture-choices').append(b);}
   const ultra=state.mode==='ultra';$('ultra-panel').hidden=!ultra;

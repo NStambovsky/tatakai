@@ -25,11 +25,10 @@ export function legalMoves(state, roll = state.roll, side = state.turn) {
   const starts = [...new Set(state.pieces[side].filter(p => p >= 0))];
   for (const from of starts) {
     const piece = state.pieces[side].indexOf(from);
-    // Arrival never captures on numbered rows. A home-side attacker earns
-    // a later capture; home defenders still countercapture on a matching roll.
+    // The resident agent responds first, without needing a matching roll.
+    // An approaching agent must wait for the opponent response turn.
     if (from > 0 && from < 21 && state.pieces[1-side].includes(partner(from)) &&
-        !(state.pendingCaptures || []).some(c=>c.side===side&&c.from===from&&c.waiting) &&
-        (sideOf(from) !== side || roll === numberOf(from) || (state.pendingCaptures || []).some(c => c.side === side && c.from === from))) {
+        !(state.pendingCaptures || []).some(c=>c.side===side&&c.from===from&&c.waiting)) {
       moves.push({piece, from, to: from, kind: 'capture'});
     }
     if (roll === null) continue;

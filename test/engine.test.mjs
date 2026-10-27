@@ -44,7 +44,7 @@ for (const side of [0,1]) {
   test(`side ${side}: delayed capture gives home one response and consumes invader turn`,()=>{
     const s=scenario();const n=move(s,flip(7),flip(18));
     assert.equal(n.pieces[side][0],flip(17));assert.equal(n.turn,side);assert.ok(validSave(n));
-    assert.ok(!legalMoves(n).some(m=>m.kind==='capture'));
+    assert.ok(legalMoves(n).some(m=>m.kind==='capture'));
     n.roll=2;const wait=move(n,camp(side),flip(13));
     const cap=legalMoves(wait).find(m=>m.kind==='capture');assert.ok(cap);
     const result=applyMove(wait,cap);assert.equal(result.pieces[side][0],-1);
@@ -55,10 +55,10 @@ for (const side of [0,1]) {
     const escaped=move(n,flip(17),flip(13));
     for(const roll of [null,1,2,3,4,5,6])assert.ok(!legalMoves(escaped,roll).some(m=>m.kind==='capture'));
   });
-  test(`side ${side}: matching roll countercaptures without moving`,()=>{
+  test(`side ${side}: home defender countercaptures without rolling or with any roll`,()=>{
     const n=move(scenario(),flip(7),flip(18));
-    for(const roll of [null,1,2,3,5,6])assert.ok(!legalMoves(n,roll).some(m=>m.kind==='capture'));
-    n.roll=4;const result=move(n,flip(17),flip(17));
+    for(const roll of [null,1,2,3,4,5,6])assert.ok(legalMoves(n,roll).some(m=>m.kind==='capture'));
+    const result=move(n,flip(17),flip(17));
     assert.equal(result.pieces[1-side][0],-1);assert.equal(result.pieces[side][0],flip(17));assert.equal(result.turn,1-side);assert.ok(validSave(result));
   });
   test(`side ${side}: every number and lane delays capture symmetrically`,()=>{
@@ -79,7 +79,7 @@ test('pending capture is optional and every AI can use it on a nonmatching roll'
   }
 });
 test('capture cannot be forged and ended games offer no captures',()=>{
-  const s=setup([21,21,21,21,21,17],[0,0,0,0,0,18],2);
+  const s=setup([21,21,21,21,21,17],[0,0,0,0,0,19],2);
   assert.throws(()=>applyMove(s,{piece:5,from:17,to:17,kind:'capture'}));
   s.draw=true;assert.deepEqual(legalMoves(s),[]);
 });
@@ -154,5 +154,13 @@ test('enemy makes progress through repeated turns with a passive player',()=>{
  s=m?applyMove(s,m):passTurn(s);
  }
  assert.ok(advances>=3,`${mode} ${d} only advanced ${advances} times`);
+ }
+});
+
+test('home advantage: each resident can capture an arriving invader before rolling on every home row',()=>{
+ for(const side of [0,1])for(let pos=11;pos<=20;pos++){
+ const flip=p=>side===0?p:21-p;const s=initialState();s.turn=1-side;s.roll=numberOf(pos);s.pieces[side][0]=flip(pos);s.pieces[1-side][0]=flip(7);
+ const n=move(s,flip(7),flip(pos%2?pos+1:pos-1));assert.equal(n.turn,side);assert.equal(n.roll,null);
+ const captured=move(n,flip(pos),flip(pos));assert.equal(captured.pieces[1-side][0],-1);assert.equal(captured.pieces[side][0],flip(pos));assert.ok(validSave(captured));
  }
 });
