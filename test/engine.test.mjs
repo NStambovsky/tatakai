@@ -5,7 +5,7 @@ function setup(white,black,roll=4){const s=initialState();s.pieces=[white,black]
 function move(s,from,to){const m=legalMoves(s).find(m=>m.from===from&&m.to===to);assert.ok(m,`expected move ${from} → ${to}`);return applyMove(s,m);}
 test('original board has four spaces for each number and two camps',()=>{for(let n=1;n<=5;n++)assert.equal(Array.from({length:22},(_,i)=>i).filter(i=>numberOf(i)===n).length,4);assert.equal(numberOf(0),6);assert.equal(numberOf(21),6);});
 test('opening deploys an agent only to the two home-side matching spaces',()=>{const s=initialState();s.roll=4;assert.deepEqual(legalMoves(s).map(m=>m.to),[17,18]);assert.equal(s.pieces[0].filter(p=>p===21).length,6);});
-test('home capture removes a lone invader and preserves the input',()=>{const s=setup([21,21,21,21,21,11],[0,0,0,0,0,18]);const n=move(s,11,17);assert.equal(n.pieces[1][5],-1);assert.equal(s.pieces[1][5],18);assert.equal(n.turn,1);assert.equal(n.roll,null);});
+test('home approach leaves the invader alive and preserves the input',()=>{const s=setup([21,21,21,21,21,11],[0,0,0,0,0,18]);const n=move(s,11,17);assert.equal(n.pieces[1][5],18);assert.equal(s.pieces[1][5],18);assert.equal(n.turn,1);assert.equal(n.roll,null);});
 test('both spaces of a same-color row protect each other',()=>{const s=setup([21,21,21,21,21,17],[0,0,0,0,3,4]);assert.ok(!legalMoves(s).some(m=>m.to===3||m.to===4));assert.ok(legalMoves(s).some(m=>m.to===18));});
 test('cannot enter occupied numbered squares',()=>{const s=setup([21,21,21,21,17,18],[0,0,0,0,0,0]);assert.ok(!legalMoves(s).some(m=>m.to===17||m.to===18));});
 test('a six enters a guarded camp from the field without capturing defenders',()=>{const s=initialState();s.pieces[0][0]=7;s.roll=6;const n=move(s,7,0);assert.equal(n.winner,null);assert.equal(n.pieces[1].filter(p=>p===0).length,6);assert.equal(n.pieces[0][0],0);});
@@ -111,4 +111,22 @@ test('all difficulties can skip a playable numbered roll',()=>{
  const s=initialState();s.roll=4;
  assert.equal(chooseMove(s,'easy',()=>.9999),null);
  for(const d of ['medium','hard']){const m=chooseMove(s,d,()=>0);assert.ok(m===null||legalMoves(s).some(x=>JSON.stringify(x)===JSON.stringify(m)));}
+});
+
+for(const side of [0,1])test(`side ${side}: home approach, enemy response, then separate capture on every row`,()=>{
+ for(let pos=11;pos<=20;pos++){
+ const flip=p=>side===0?p:21-p;const target=flip(pos);const beside=flip(pos%2?pos+1:pos-1);
+ const s=initialState();s.turn=side;s.roll=numberOf(target);s.pieces[1-side][0]=target;
+ const n=move(s,camp(side),beside);assert.equal(n.pieces[1-side][0],target);assert.equal(n.turn,1-side);assert.ok(validSave(n));
+ const response=passTurn(n);assert.ok(validSave(response));
+ const captured=move(response,beside,beside);assert.equal(captured.pieces[1-side][0],-1);assert.equal(captured.ply,3);assert.equal(captured.turn,1-side);assert.ok(validSave(captured));
+ }
+});
+test('home approach expires when threatened invader escapes and survives save round trip',()=>{
+ const s=setup([21,21,21,21,21,21],[0,0,0,0,0,18]);
+ const n=JSON.parse(JSON.stringify(move(s,21,17)));assert.ok(validSave(n));n.roll=2;
+ const escaped=move(n,18,7);assert.equal(escaped.pendingCaptures.length,0);assert.ok(!legalMoves(escaped).some(m=>m.kind==='capture'));
+});
+test('save rejects forged approaches without an adjacent opponent',()=>{
+ const s=initialState();s.pendingCaptures=[{side:0,from:17}];assert.ok(!validSave(s));
 });

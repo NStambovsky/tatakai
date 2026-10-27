@@ -23,10 +23,10 @@ export function legalMoves(state, roll = state.roll, side = state.turn) {
   const starts = [...new Set(state.pieces[side].filter(p => p >= 0))];
   for (const from of starts) {
     const piece = state.pieces[side].indexOf(from);
-    // Mixed rows arise only when an invader approaches a home agent.
-    // Alternating turns guarantee the home agent gets a response first.
+    // Arrival never captures on numbered rows. A home-side attacker earns
+    // a later capture; home defenders still countercapture on a matching roll.
     if (from > 0 && from < 21 && state.pieces[1-side].includes(partner(from)) &&
-        (sideOf(from) !== side || roll === numberOf(from))) {
+        (sideOf(from) !== side || roll === numberOf(from) || (state.pendingCaptures || []).some(c => c.side === side && c.from === from))) {
       moves.push({piece, from, to: from, kind: 'capture'});
     }
     if (roll === null) continue;
@@ -54,12 +54,19 @@ export function applyMove(state, move, roll = state.roll) {
   const to = allowed.to;
   // At camp, only a returning defender captures an infiltrator. Entering a
   // guarded enemy camp does not capture its defenders (as shown in the reel).
-  if (allowed.kind === 'capture' || (roll === 6 ? to === camp(side) : sideOf(to) === side)) {
+  if (allowed.kind === 'capture' || (roll === 6 && to === camp(side))) {
     const captureAt = allowed.kind === 'capture' ? partner(to) : roll === 6 ? to : partner(to);
     const victim = next.pieces[enemy].indexOf(captureAt);
     if (victim >= 0) next.pieces[enemy][victim] = -1;
   }
   next.pieces[side][allowed.piece] = to;
+  // Forget an old approach if either agent moved or was captured.
+  next.pendingCaptures = (state.pendingCaptures || []).filter(c =>
+    !(c.side === side && c.from === allowed.from) &&
+    next.pieces[c.side].includes(c.from) && next.pieces[1-c.side].includes(partner(c.from)));
+  if (to > 0 && to < 21 && allowed.from !== to && next.pieces[enemy].includes(partner(to))) {
+    next.pendingCaptures.push({side, from: to});
+  }
   next.ply++;
   next.winner = outcome(next);
   next.draw = next.winner === null && next.ply >= 300;
@@ -94,7 +101,7 @@ export function evaluate(state, side) {
     // Advancing enables a six; mixed rows favor the side with a pending capture.
     value += positions.filter(p => sideOf(p) !== s).length * 5;
     for (const pos of positions) if (enemies.includes(partner(pos))) {
-      value += sideOf(pos) !== s ? 12 : -12;
+      value += state.turn === s ? 12 : -12;
     }
     if (enemies.includes(camp(s)) && home === 1) value -= 30;
     return value;
@@ -136,6 +143,9 @@ export function validSave(s) {
     Number.isInteger(s.ply) && s.ply>=0 && s.ply<=300 &&
     [null,0,1].includes(s.winner) && typeof s.draw==='boolean' &&
     Array.isArray(s.pieces) && s.pieces.length===2 && s.pieces.every(a => Array.isArray(a) && a.length===6 && a.every(p => Number.isInteger(p) && p>=-1 && p<=21)) &&
+    (s.pendingCaptures === undefined || (Array.isArray(s.pendingCaptures) && s.pendingCaptures.length <= 10 && s.pendingCaptures.every(c =>
+      c && [0,1].includes(c.side) && Number.isInteger(c.from) && c.from > 0 && c.from < 21 &&
+      s.pieces[c.side].includes(c.from) && s.pieces[1-c.side].includes(partner(c.from))))) &&
     s.winner === outcome(s) && s.draw === (s.winner === null && s.ply >= 300) &&
     !Array.from({length:20},(_,i)=>i+1).some(p => s.pieces.flat().filter(x=>x===p).length>1);
 }

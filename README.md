@@ -13,7 +13,7 @@ Open `https://www.noahstambovsky.com/tatakai/`. Choose Easy, Medium, or Hard. Ro
 - Original game: https://www.etsy.com/listing/992899200/tatakai-a-game-of-covert-warfare
 - Reference: https://boardgamegeek.com/boardgame/422635/tatakai-a-game-of-covert-warfare
 
-Both camps start with six agents. A die roll selects the **destination number**, not a movement distance. There are two spaces for each of 1–5 on each half of the board. On your home side, a lone enemy is captured by entering its empty partner space. On the enemy’s home side, entering the partner space leaves both agents in place: the home agent gets one turn to escape normally or countercapture in place with the matching number. If both remain, the invader can capture in place on their next turn without a matching roll, including before rolling. That capture consumes the turn. Occupied numbered spaces cannot be entered. Friendly agents occupying both spaces of one row protect one another. A six sends any battlefield agent home, or an agent already on the opponent’s half into the enemy camp: returning home removes an enemy infiltrator, and an agent already at home can spend a six to discover and remove one without moving; entering the enemy camp does not remove its defenders. An agent in an undefended enemy camp wins, including when the last defender leaves an already infiltrated camp.
+Both camps start with six agents. A die roll selects the **destination number**, not a movement distance. There are two spaces for each of 1–5 on each half of the board. On either numbered half, moving beside an enemy never captures immediately. The opponent gets a response turn; if both agents stay, the approaching agent can spend a later turn capturing without another matching roll. Home defenders responding to an approaching invader still need the matching number to countercapture. Occupied numbered spaces cannot be entered. Friendly agents occupying both spaces of one row protect one another. A six sends any battlefield agent home, or an agent already on the opponent’s half into the enemy camp: returning home removes an enemy infiltrator, and an agent already at home can spend a six to discover and remove one without moving; entering the enemy camp does not remove its defenders. An agent in an undefended enemy camp wins, including when the last defender leaves an already infiltrated camp.
 
 ### Explicit browser conventions
 
@@ -53,3 +53,7 @@ Implements the requested home-side advantage and opponent-side eligibility for b
 ## Optional turn skip
 
 On every turn, before or after rolling any number, either player may skip instead of moving or capturing. This consumes the turn and leaves all agents in place. All AI levels consider skipping; immediate wins still take priority. Existing v4 saves remain compatible.
+
+## Separate approach and capture turns
+
+Both halves now require an approach turn before capture. Pending approaches persist in saves and clear when either agent leaves the row. Existing saves remain compatible. Camp defence remains unchanged.
