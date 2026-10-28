@@ -46,3 +46,7 @@ Each agent may use only one movement die per turn. Actions can stack on the same
 ### Stronger Extreme protection and repair
 
 Vault may jump past a pair but cannot land on or capture either protected agent. Route switching can capture a lone enemy but cannot land on a protected pair. Strike Ahead and coordinated two-agent attacks remain the ways to break a pair. A six now repairs one base health using an agent at home, up to the maximum of five; each repair spends one die. The computer follows the same repair and protection rules. Current saves remain compatible. 96 tests pass.
+
+### Linear and Ultra home response priority
+
+Landing on an invader on your turf still captures immediately. Landing on a resident defender on their turf creates a contested shared space: both agents survive, and the home defender may spend an action to capture regardless of roll, before or after rolling. If both agents remain through the home player’s full turn, the invader may spend an action to capture on its next turn without a matching roll. Moving either piece clears the face-off. Ultra extra actions do not satisfy or bypass the response turn. Strike Ahead targets invaders on home turf, so it cannot bypass the resident’s priority. A Capture enemy piece button and outlined contested spaces expose the state. Existing noncontested v5 saves remain compatible. 118 tests pass.

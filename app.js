@@ -1,6 +1,6 @@
-import {EXTREME_SPECIALS,extremeCamp,extremeRank,extremeRoute,extremePair,fullRow,selectExtremeDie,skipExtremeDie} from './extreme.js?v=18';
-import {LINEAR_SPECIALS,linearCamp,linearRank,CHECKPOINTS,INTEL_ROWS,TURN_LIMIT} from './linear.js?v=18';
-import { initialState, legalMoves, applyMove, passTurn, canPass, chooseMove, validSave, adjustRoll, chooseCommand, rollTurn, CARDS, upgradeCards, canBuyCard, buyCard, cardBlock, playCard, chooseCard } from './engine.js?v=18';
+import {EXTREME_SPECIALS,extremeCamp,extremeRank,extremeRoute,extremePair,fullRow,selectExtremeDie,skipExtremeDie} from './extreme.js?v=19';
+import {LINEAR_SPECIALS,linearCamp,linearRank,CHECKPOINTS,INTEL_ROWS,TURN_LIMIT} from './linear.js?v=19';
+import { initialState, legalMoves, applyMove, passTurn, canPass, chooseMove, validSave, adjustRoll, chooseCommand, rollTurn, CARDS, upgradeCards, canBuyCard, buyCard, cardBlock, playCard, chooseCard } from './engine.js?v=19';
 const $ = id => document.getElementById(id);
 const KEY = 'crosscamp-v5';
 let state = initialState(), difficulty = 'medium', selected = null, busy = false, lastMove = null, timer = null, generation = 0;
@@ -36,7 +36,7 @@ function base(side){return state.mode==='extreme'?extremeCamp(side):linearCamp(s
 function specials(){return state.mode==='extreme'?EXTREME_SPECIALS:LINEAR_SPECIALS;}
 function healthMax(){return state.mode==='extreme'?5:3;}
 function turnDice(){return state.mode==='extreme'?[rollDie(),rollDie(),rollDie()]:rollDie();}
-function displayMoves(){return legalMoves(state).filter(m=>m.action===linearAction);}
+function displayMoves(){return legalMoves(state).filter(m=>m.action===linearAction||m.action==='capture');}
 function textPos(pos){if(state.mode==='extreme')return pos===49?'your base':pos===0?'rival base':`${extremeRank(pos)<6?'rival':'your'} ${Math.min(extremeRank(pos)+1,12-extremeRank(pos))}, ${extremeRoute(pos)===0?'upper':'lower'} route, track ${(pos-1)%2+1}`;return pos===25?'your base':pos===0?'rival base':`${pos<=12?'rival':'your'} ${Math.min(linearRank(pos)+1,12-linearRank(pos))}, ${pos%2?'upper':'lower'} route`;}
 function counts(pos,side) { return state.pieces[side].filter(p=>p===pos).length; }
 function addLog(message) { log.unshift(message); log=log.slice(0,6); }
@@ -58,6 +58,7 @@ function render() {
     const b=document.createElement('button');
     b.type='button'; b.dataset.pos=pos;
     b.className=isCamp?`camp ${pos===0?'enemy':''}`:'space';
+    if(state.mode!=='extreme'&&!isCamp&&own&&rival){b.classList.add('home-faceoff');b.setAttribute('title','Contested space: home defender has the first capture opportunity');}
     if(destinations.includes(pos)) b.classList.add('available');
     if(selected===pos) b.classList.add('selected');
     if(lastMove?.to===pos) b.classList.add('last-move');
@@ -128,6 +129,7 @@ function render() {
   $('roll').hidden=active() && state.turn===0 && state.roll!==null && !busy && moves.length===0;
   $('pass').hidden=!(state.turn===0 && !busy && canPass(state));
   $('pass').textContent=state.mode==='extreme'?'End turn · skip remaining dice':state.extraActions?'End turn · forfeit extra actions':'Skip turn →';
+  renderHomeCaptures();
   renderActions(moves);
   $('log').replaceChildren(...log.map(t=>{const li=document.createElement('li');li.textContent=t;return li;}));
   let title,detail,instruction;
@@ -144,10 +146,11 @@ function render() {
     detail='Roll, advance, use a special, or skip.';
     instruction=moves.length===0&&state.roll!==null?'No agent can use this roll. Pass to the rival.':selected===null?'Tap one of your agents, then a highlighted space.':`Selected: ${textPos(selected)}. Tap a gold destination. Choose a highlighted destination.`;
   }
-  if(state.turn===0&&!busy&&active()){detail=state.roll===null?'Roll for forward distance and a special action, or skip.':`Roll ${state.roll}: advance ${state.roll}, use ${specials()[state.roll].name}, or skip.`;instruction=linearAction==='special'?'Choose an agent, then a special destination or the action button below.':'Select an agent, then a highlighted destination. Land on an enemy to capture it.';}
+  if(state.turn===0&&!busy&&active()){detail=state.roll===null?'Roll for forward distance and a special action, or skip.':`Roll ${state.roll}: advance ${state.roll}, use ${specials()[state.roll].name}, or skip.`;instruction=linearAction==='special'?'Choose an agent, then a special destination or the action button below.':'On your turf, capture invaders on landing. On theirs, landing on a defender gives them a response turn.';}
   if(!active()&&!state.draw&&(state.ply<TURN_LIMIT||state.health.includes(0)||state.pieces.some(a=>a.every(p=>p===-1)))){title=state.winner===0?'Victory.':'Defeat.';detail=state.health.includes(0)?'The enemy base has fallen. The base has no health left.':'All opposing agents have been captured.';if(state.winner===1)detail=state.health[0]===0?'Your base lost all its health.':'All your agents have been captured.';}
   if(state.mode!=='extreme'&&!active()&&state.ply>=TURN_LIMIT&&!state.health.includes(0)&&!state.pieces.some(a=>a.every(p=>p===-1))){title=state.draw?'Intelligence tied.':state.winner===0?'Victory on intelligence.':'Rival wins on intelligence.';detail=`Turn limit reached. Intelligence: you ${state.intel[0]}, rival ${state.intel[1]}.`;}
   if(state.mode==='extreme'){if(active()&&state.turn===0&&!busy){detail=state.dice.length?`${state.dice.filter(Boolean).length} dice left. Choose a die, then move, use its special, attack with a pair, or skip that die.`:'Roll all three dice, then spend them separately in any order.';instruction='Pairs resist movement, route switches and Vault landings. Break them with Strike Ahead or two attackers. Each agent gets one movement die; actions can stack.';}if(state.draw)detail='160 turns completed. Start a new campaign.';}
+  if(state.mode!=='extreme'&&active()&&state.turn===0&&!busy&&legalMoves(state).some(m=>m.kind==='capture')){detail='Capture enemy piece is ready, regardless of your roll. Capturing uses one action.';}
   $('status-title').textContent=title;$('status-detail').textContent=detail;$('selection').textContent=instruction;
 }
 function handleCell(pos) {
@@ -162,7 +165,7 @@ function execute(move) {
   const side=state.turn, rolled=state.mode==='extreme'?state.dice[move.dieIndex]:state.roll, beforeCoins=state.mode==='ultra'?state.coins[state.turn]:0, before=state.pieces[1-side].filter(p=>p>=0).length;
   state=applyMove(state,move);linearAction='move';lastMove={from:move.from,to:move.to};selected=null;
   const captured=state.pieces[1-side].filter(p=>p>=0).length<before;
-  addLog(`${side===0?'You':'Rival'} rolled ${rolled}: ${move.kind==='reverse'?`reverse + ${rolled===1?'die '+(move.movementDie+1):''} (${Math.abs(move.steps)} backward)`:move.kind==='assault'?'coordinated attack':move.action==='special'?specials()[rolled].name:'advance '+rolled} · ${textPos(move.from)}${move.from!==move.to?' → '+textPos(move.to):''}${captured?' · enemy captured':''}.`);
+  addLog(`${side===0?'You':'Rival'}${move.kind==='capture'?' used an action':` rolled ${rolled}`}: ${move.kind==='capture'?'capture after response':move.kind==='reverse'?`reverse + ${rolled===1?'die '+(move.movementDie+1):''} (${Math.abs(move.steps)} backward)`:move.kind==='assault'?'coordinated attack':move.action==='special'?specials()[rolled].name:'advance '+rolled} · ${textPos(move.from)}${move.from!==move.to?' → '+textPos(move.to):''}${captured?' · enemy captured':move.contest?' · defender gets the first capture opportunity':''}.`);
   if(move.kind==='repair')addLog(`${side===0?'You':'Rival'} repaired 1 base health · ${state.health[side]}/5 health.`);
   if(state.mode==='ultra'&&state.coins[side]>beforeCoins)addLog(`${side===0?'You':'Rival'} earned ${state.coins[side]-beforeCoins} coins.`);
   if(move.to===base(1-side))addLog(`${side===0?'You':'Rival'} dealt 1 base damage and returned home.`);
@@ -225,6 +228,17 @@ function renderActions(){
   const queued=state.forcedRolls.map((r,s)=>r?`${s===0?'Your':'Rival’s'} next roll is set to ${r}.`:null).filter(Boolean).join(' ');
   $('power-note').textContent=[queued,state.rollLocked?'This roll is locked by the rival.':'Loaded Die and False Orders use the chosen die face.'].filter(Boolean).join(' ');
 
+}
+function renderHomeCaptures(){
+ const on=state.mode!=='extreme',ready=on&&active()&&state.turn===0&&!busy;
+ $('home-capture').hidden=!on;$('home-capture-note').hidden=!on;$('home-capture-options').hidden=!on;
+ const captures=ready?legalMoves(state).filter(m=>m.kind==='capture'):[];
+ $('home-capture').disabled=!captures.length;$('home-capture-options').replaceChildren();
+ const selectedCapture=captures.find(m=>m.from===selected);
+ $('home-capture').onclick=()=>{if(!ready)return;if(selectedCapture||captures.length===1)execute(selectedCapture??captures[0]);else $('home-capture-options').querySelector('button')?.focus();};
+ const waiting=(state.pendingCaptures??[]).some(c=>c.attacker===0&&!c.ready);
+ $('home-capture-note').textContent=captures.length?'Ready: capture uses one action, before or after rolling.':waiting?'Your invader must wait for the home defender’s full response turn.':'Home defenders capture first. If both stay through that response, the invader may capture next turn.';
+ if(captures.length>1)for(const m of captures){const b=document.createElement('button');b.className='secondary';b.textContent=`Capture at ${textPos(m.from)}`;b.addEventListener('click',()=>execute(m));$('home-capture-options').append(b);}
 }
 function renderExtremeDice(){
  const tray=$('extreme-dice'),on=state.mode==='extreme';tray.hidden=!on;$('skip-die').hidden=!on;$('die').hidden=on;tray.replaceChildren();
