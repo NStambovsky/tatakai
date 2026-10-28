@@ -40,7 +40,7 @@ Open http://localhost:8766. `engine.js` contains pure game logic; `app.js` handl
 
 ## Deploy
 
-Copy `index.html`, `style.css`, `engine.js`, `app.js`, and `icon.svg` into `tatakai/` in the personal website’s publish directory. Commit and push GitHub first, then deploy that directory to the Cloudflare Pages project `noahstambovsky`. Keep all existing published site files in the upload; Cloudflare Direct Upload replaces a full deployment. Do not upload source docs, tests, `.git`, dependencies, or local backups.
+Copy `index.html`, `style.css`, `engine.js`, `linear.js`, `app.js`, and `icon.svg` into `tatakai/` in the personal website’s publish directory. Commit and push GitHub first, then deploy that directory to the Cloudflare Pages project `noahstambovsky`. Keep all existing published site files in the upload; Cloudflare Direct Upload replaces a full deployment. Do not upload source docs, tests, `.git`, dependencies, or local backups.
 
 ## Clarification from the longer video
 
@@ -84,3 +84,18 @@ Classic is unchanged. Existing Ultra games migrate once, retaining the board, co
 Desktop uses a compact board alongside turn controls and a tabbed Hand/Market rack. Cards scroll horizontally with arrow controls and keyboard-accessible tabs. The board and core card controls fit common laptop screens, including 1280×720 with a full hand. Settings and history remain below the play area.
 
 Each opponent card play reveals the card and its actual effect for 3.2 seconds, with a Continue button and Escape support. No subsequent AI action occurs until the reveal finishes. The effect is committed once before presentation; reloading cannot replay it. A saved last-rival-card summary remains visible. Reveals fit phone screens and do not rely on animation.
+
+## Linear mode
+
+Choose Linear when starting a new game. The board has 24 spaces in two lanes of 12, plus the two bases. Each roll can move any agent forward that many rows in its lane, use the corresponding special, or skip. Deployment can use either lane. Pieces can jump occupied intermediate spaces, but must land on an empty field space. Entering the opposing base requires an exact roll. Ordinary movement never captures.
+
+| Roll | Special |
+| --- | --- |
+| 1 | Move one step backwards. |
+| 2 | Change to the empty space in the other lane. |
+| 3 | Capture the enemy directly ahead without moving. |
+| 4 | Recall an agent to your base. |
+| 5 | Advance one to four rows instead of five. |
+| 6 | Use a home defender to remove one enemy in your base. |
+
+A special consumes the turn, just like movement. Skipping is always available. An agent in an undefended enemy base wins; eliminating all enemies also wins. Linear has no Ultra cards or coins. Its pure rules are in `linear.js`; all three computer difficulties support this mode. The test suite contains 89 checks across all modes.

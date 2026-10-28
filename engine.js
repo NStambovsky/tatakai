@@ -1,3 +1,4 @@
+import {initialLinear,linearOutcome,linearMoves,applyLinear,evaluateLinear,validLinear} from './linear.js?v=12';
 // State and rules are independent of the UI. 0 = ivory, 1 = charcoal.
 export const VERSION = 4;
 export const camp = side => side === 0 ? 21 : 0;
@@ -5,11 +6,13 @@ export const sideOf = pos => pos <= 10 ? 1 : 0;
 export const numberOf = pos => pos === 0 || pos === 21 ? 6 : pos <= 10 ? 6 - Math.ceil(pos/2) : Math.ceil((pos-10)/2);
 export const partner = pos => pos % 2 === 1 ? pos+1 : pos-1;
 export function initialState(mode = 'classic', random = Math.random) {
+  if(mode==='linear')return initialLinear();
   if (!['classic','ultra'].includes(mode)) throw new Error('Unknown mode');
   const state = {version: VERSION, mode, coins:[3,3], forcedRolls:[null,null], powerUsed:false, rollLocked:false, pieces: [Array(6).fill(21), Array(6).fill(0)], turn: 0, roll: null, ply: 0, winner: null, draw: false};
   return upgradeCards(state, random);
 }
 export function outcome(state) {
+  if(state.mode==='linear')return linearOutcome(state);
   for (const side of [0, 1]) {
     const enemyCamp = camp(1 - side);
     if (state.pieces[side].includes(enemyCamp) && !state.pieces[1-side].includes(enemyCamp)) return side;
@@ -18,6 +21,7 @@ export function outcome(state) {
   return null;
 }
 export function legalMoves(state, roll = state.roll, side = state.turn) {
+  if(state.mode==='linear')return linearMoves(state,roll,side);
   if (state.winner !== null || state.draw) return [];
   if (roll !== null && (!Number.isInteger(roll) || roll < 1 || roll > 6)) return [];
   const moves = [];
@@ -50,6 +54,7 @@ export function legalMoves(state, roll = state.roll, side = state.turn) {
   return moves;
 }
 export function applyMove(state, move, roll = state.roll) {
+  if(state.mode==='linear')return applyLinear(state,move,roll);
   const allowed = legalMoves(state, roll).find(m => m.piece === move.piece && m.to === move.to && m.from === move.from && m.kind === move.kind);
   if (!allowed) throw new Error('Illegal move');
   const next = structuredClone(state), side = state.turn, enemy = 1-side;
@@ -95,6 +100,7 @@ export function passTurn(state) {
   return next;
 }
 export function evaluate(state, side) {
+  if(state.mode==='linear')return evaluateLinear(state,side);
   const win = state.winner ?? outcome(state);
   if (win !== null) return win === side ? 10000 : -10000;
   if (state.draw) return 0;
@@ -154,6 +160,7 @@ export function chooseMove(state, difficulty = 'medium', random = Math.random) {
   return pool[Math.floor(random()*pool.length)];
 }
 export function validSave(s) {
+  if(s?.mode==='linear')return validLinear(s);
   return !!s && s.version === VERSION && [0,1].includes(s.turn) &&
     (s.roll === null || (Number.isInteger(s.roll) && s.roll>=1 && s.roll<=6)) &&
     Number.isInteger(s.ply) && s.ply>=0 && s.ply<=300 &&
