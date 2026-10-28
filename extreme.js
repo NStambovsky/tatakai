@@ -7,11 +7,11 @@ export const extremePos=(rank,route,lane)=>rank*4+route*2+lane+1;
 export const extremePair=(rank,route)=>[extremePos(rank,route,0),extremePos(rank,route,1)];
 export const EXTREME_SPECIALS={
  1:{name:'Reverse',text:'Step back one as an action, or combine this 1 with another unused die to move backward by that die’s value. Each agent can use only one movement die per turn.'},
- 2:{name:'Change routes',text:'Switch to either track of the other route at the same distance from base. Can capture one blocker.'},
+ 2:{name:'Change routes',text:'Switch to either track of the other route at the same distance from base. Can capture a lone enemy, but cannot land on an enemy pair.'},
  3:{name:'Strike ahead',text:'Capture either enemy in the row immediately ahead. Can break a blockade; your agent stays put.'},
  4:{name:'Return home',text:'Recall one field agent to your base, passing all blockades.'},
- 5:{name:'Vault',text:'Advance 1–5 rows on this route, jumping blockades. Can capture one blocker on landing.'},
- 6:{name:'Home defence',text:'An agent at home captures one enemy on your half of either route.'}
+ 5:{name:'Vault',text:'Advance 1–5 rows on this route, jumping blockades. Can capture a lone enemy on landing, but cannot land on an enemy pair.'},
+ 6:{name:'Repair base',text:'Use an agent at home to restore 1 base health, up to 5. Uses this die; does not capture.'}
 };
 export function initialExtreme(){return {version:5,mode:'extreme',pieces:[Array(10).fill(49),Array(10).fill(0)],health:[5,5],turn:0,roll:null,dice:[],dieIndex:null,movedAgents:[],ply:0,winner:null,draw:false};}
 export function extremeOutcome(s){for(const side of [0,1])if(s.health[1-side]===0||s.pieces[1-side].every(p=>p===-1))return side;return null;}
@@ -35,7 +35,7 @@ export function extremeMoves(s){
   const routes=from===extremeCamp(side)?[0,1]:[extremeRoute(from)];
   for(const route of routes){
    if(!bypass&&Array.from({length:12},(_,r)=>r).some(r=>r>Math.min(start,end)&&r<Math.max(start,end)&&fullRow(s,r,route)))continue;
-   if(!bypass&&end>=0&&end<12&&fullRow(s,end,route,enemy))continue;
+   if(end>=0&&end<12&&fullRow(s,end,route,enemy))continue;
    const dest=end===-1?[0]:end===12?[49]:extremePair(end,route);
    for(const to of dest)if(to!==from&&(!(to>0&&to<49)||!own(to)))add(from,to,kind,action,enemyAt(to)&&to>0&&to<49?to:undefined,{steps,piece,...(movementDie===null?{}:{movementDie})});
   }
@@ -44,11 +44,11 @@ export function extremeMoves(s){
   const field=from>0&&from<49,rank=extremeRank(from),route=field?extremeRoute(from):null;
   walk(from,roll,'advance');
   if(roll===1&&field){walk(from,-1,'retreat','special');for(let i=0;i<3;i++)if(i!==s.dieIndex&&s.dice[i])walk(from,-s.dice[i],'reverse','special',false,i);}
-  if(roll===2&&field)for(const to of extremePair(rank,1-route))if(!own(to))add(from,to,'sidestep','special',enemyAt(to)?to:undefined);
+  if(roll===2&&field&&!fullRow(s,rank,1-route,enemy))for(const to of extremePair(rank,1-route))if(!own(to))add(from,to,'sidestep','special',enemyAt(to)?to:undefined);
   if(roll===3&&field&&rank+dir>=0&&rank+dir<12)for(const target of extremePair(rank+dir,route))if(enemyAt(target))add(from,from,'strike','special',target);
   if(roll===4&&field)add(from,extremeCamp(side),'recall','special');
   if(roll===5)for(let steps=1;steps<=5;steps++)walk(from,steps,'vault','special',true);
-  if(roll===6&&!field)for(const target of s.pieces[enemy].filter(p=>p>0&&p<49&&(side===0?extremeRank(p)>=6:extremeRank(p)<6)))add(from,from,'sweep','special',target);
+  if(roll===6&&from===extremeCamp(side)&&s.health[side]<5)add(from,from,'repair','special');
   const ahead=rank+dir;
   if(field&&ahead>=0&&ahead<12&&fullRow(s,rank,route,side)&&fullRow(s,ahead,route,enemy)){
    const support=extremePair(rank,route).find(p=>p!==from);
@@ -63,6 +63,7 @@ export function applyExtreme(s,move){
  const m=extremeMoves(selected).find(x=>['from','to','piece','kind','action','dieIndex','target','support','steps','movementDie'].every(k=>x[k]===move[k]));
  if(!m)throw Error('Illegal Extreme action');
  const n=structuredClone(selected);n.pieces[n.turn][m.piece]=m.to;
+ if(m.kind==='repair')n.health[n.turn]++;
  if(m.action==='move'||m.movementDie!==undefined)n.movedAgents.push(m.piece);
  if(m.movementDie!==undefined)n.dice[m.movementDie]=null;
  if(m.target!==undefined)n.pieces[1-n.turn][n.pieces[1-n.turn].indexOf(m.target)]=-1;

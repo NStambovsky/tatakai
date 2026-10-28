@@ -1,6 +1,6 @@
-import {EXTREME_SPECIALS,extremeCamp,extremeRank,extremeRoute,extremePair,fullRow,selectExtremeDie,skipExtremeDie} from './extreme.js?v=17';
-import {LINEAR_SPECIALS,linearCamp,linearRank,CHECKPOINTS,INTEL_ROWS,TURN_LIMIT} from './linear.js?v=17';
-import { initialState, legalMoves, applyMove, passTurn, canPass, chooseMove, validSave, adjustRoll, chooseCommand, rollTurn, CARDS, upgradeCards, canBuyCard, buyCard, cardBlock, playCard, chooseCard } from './engine.js?v=17';
+import {EXTREME_SPECIALS,extremeCamp,extremeRank,extremeRoute,extremePair,fullRow,selectExtremeDie,skipExtremeDie} from './extreme.js?v=18';
+import {LINEAR_SPECIALS,linearCamp,linearRank,CHECKPOINTS,INTEL_ROWS,TURN_LIMIT} from './linear.js?v=18';
+import { initialState, legalMoves, applyMove, passTurn, canPass, chooseMove, validSave, adjustRoll, chooseCommand, rollTurn, CARDS, upgradeCards, canBuyCard, buyCard, cardBlock, playCard, chooseCard } from './engine.js?v=18';
 const $ = id => document.getElementById(id);
 const KEY = 'crosscamp-v5';
 let state = initialState(), difficulty = 'medium', selected = null, busy = false, lastMove = null, timer = null, generation = 0;
@@ -147,7 +147,7 @@ function render() {
   if(state.turn===0&&!busy&&active()){detail=state.roll===null?'Roll for forward distance and a special action, or skip.':`Roll ${state.roll}: advance ${state.roll}, use ${specials()[state.roll].name}, or skip.`;instruction=linearAction==='special'?'Choose an agent, then a special destination or the action button below.':'Select an agent, then a highlighted destination. Land on an enemy to capture it.';}
   if(!active()&&!state.draw&&(state.ply<TURN_LIMIT||state.health.includes(0)||state.pieces.some(a=>a.every(p=>p===-1)))){title=state.winner===0?'Victory.':'Defeat.';detail=state.health.includes(0)?'The enemy base has fallen. The base has no health left.':'All opposing agents have been captured.';if(state.winner===1)detail=state.health[0]===0?'Your base lost all its health.':'All your agents have been captured.';}
   if(state.mode!=='extreme'&&!active()&&state.ply>=TURN_LIMIT&&!state.health.includes(0)&&!state.pieces.some(a=>a.every(p=>p===-1))){title=state.draw?'Intelligence tied.':state.winner===0?'Victory on intelligence.':'Rival wins on intelligence.';detail=`Turn limit reached. Intelligence: you ${state.intel[0]}, rival ${state.intel[1]}.`;}
-  if(state.mode==='extreme'){if(active()&&state.turn===0&&!busy){detail=state.dice.length?`${state.dice.filter(Boolean).length} dice left. Choose a die, then move, use its special, attack with a pair, or skip that die.`:'Roll all three dice, then spend them separately in any order.';instruction='Each agent gets one movement die per turn; actions can stack. For a longer reverse, select a 1, choose Special, then select an agent and a reverse + die option.';}if(state.draw)detail='160 turns completed. Start a new campaign.';}
+  if(state.mode==='extreme'){if(active()&&state.turn===0&&!busy){detail=state.dice.length?`${state.dice.filter(Boolean).length} dice left. Choose a die, then move, use its special, attack with a pair, or skip that die.`:'Roll all three dice, then spend them separately in any order.';instruction='Pairs resist movement, route switches and Vault landings. Break them with Strike Ahead or two attackers. Each agent gets one movement die; actions can stack.';}if(state.draw)detail='160 turns completed. Start a new campaign.';}
   $('status-title').textContent=title;$('status-detail').textContent=detail;$('selection').textContent=instruction;
 }
 function handleCell(pos) {
@@ -163,6 +163,7 @@ function execute(move) {
   state=applyMove(state,move);linearAction='move';lastMove={from:move.from,to:move.to};selected=null;
   const captured=state.pieces[1-side].filter(p=>p>=0).length<before;
   addLog(`${side===0?'You':'Rival'} rolled ${rolled}: ${move.kind==='reverse'?`reverse + ${rolled===1?'die '+(move.movementDie+1):''} (${Math.abs(move.steps)} backward)`:move.kind==='assault'?'coordinated attack':move.action==='special'?specials()[rolled].name:'advance '+rolled} · ${textPos(move.from)}${move.from!==move.to?' → '+textPos(move.to):''}${captured?' · enemy captured':''}.`);
+  if(move.kind==='repair')addLog(`${side===0?'You':'Rival'} repaired 1 base health · ${state.health[side]}/5 health.`);
   if(state.mode==='ultra'&&state.coins[side]>beforeCoins)addLog(`${side===0?'You':'Rival'} earned ${state.coins[side]-beforeCoins} coins.`);
   if(move.to===base(1-side))addLog(`${side===0?'You':'Rival'} dealt 1 base damage and returned home.`);
   save();render();
@@ -247,7 +248,7 @@ function renderLinear(moves){
   if(ready&&['special','assault'].includes(linearAction)){
     const candidates=moves.filter(m=>selected===null?moves.length<=2:m.from===selected);
     if(!moves.length)$('linear-note').textContent+=' No eligible agent right now; move forward or skip instead.';
-    for(const m of candidates){const b=document.createElement('button');b.className='secondary';b.textContent=(m.kind==='reverse'?`Reverse + die ${m.movementDie+1} (${Math.abs(m.steps)}) · `:'')+(m.target!==undefined?`Capture enemy at ${textPos(m.target)}`:`${textPos(m.from)} → ${textPos(m.to)}`);b.addEventListener('click',()=>execute(m));$('linear-options').append(b);}
+    for(const m of candidates){const b=document.createElement('button');b.className='secondary';b.textContent=m.kind==='repair'?`Repair base · +1 health (${state.health[state.turn]}/5)`:(m.kind==='reverse'?`Reverse + die ${m.movementDie+1} (${Math.abs(m.steps)}) · `:'')+(m.target!==undefined?`Capture enemy at ${textPos(m.target)}`:`${textPos(m.from)} → ${textPos(m.to)}`);b.addEventListener('click',()=>execute(m));$('linear-options').append(b);}
   }
 }
 for(const [id,action] of [['linear-move','move'],['linear-special','special'],['extreme-assault','assault']])$(id).addEventListener('click',()=>{if(busy||state.turn!==0||state.roll===null||!active())return;linearAction=action;selected=null;render();});

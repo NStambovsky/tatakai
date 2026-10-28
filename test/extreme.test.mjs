@@ -26,15 +26,17 @@ for(const side of [0,1]){
  const n=move(s,p(9),p(8),'assault');assert.equal(n.pieces[1-side][0],-1);assert.equal(n.pieces[side][1],p(9,0,1));assert.equal(n.turn,side);assert.equal(n.dice.filter(Boolean).length,2);assert.ok(validSave(n));
  const m=legalMoves(s).find(m=>m.kind==='assault');assert.throws(()=>applyMove(s,{...m,support:camp(side)}));
  });
- test(`side ${side}: special strike and vault break blockades`,()=>{
+ test(`side ${side}: strike breaks a pair; vault jumps it without capturing it`,()=>{
  const s=setup(side,[3,5,2]);s.pieces[side][0]=p(9);s.pieces[1-side][0]=p(8);s.pieces[1-side][1]=p(8,0,1);
  assert.equal(move(s,p(9),p(9),'strike').pieces[1-side][0],-1);
- const v=selectExtremeDie(s,1);assert.ok(move(v,p(9),p(6),'vault'));assert.equal(move(v,p(9),p(8),'vault').pieces[1-side][0],-1);
+ const v=selectExtremeDie(s,1);assert.ok(move(v,p(9),p(6),'vault'));assert.ok(!legalMoves(v).some(m=>m.kind==='vault'&&m.to===p(8)));assert.ok(!legalMoves(v).some(m=>m.kind==='vault'&&m.to===p(8,0,1)));
+ s.pieces[1-side][1]=camp(1-side);assert.equal(move(selectExtremeDie(s,1),p(9),p(8),'vault').pieces[1-side][0],-1);
  });
- test(`side ${side}: switching routes captures a blocker while forward moves stay on their route`,()=>{
+ test(`side ${side}: switching routes respects pairs but can capture a lone enemy`,()=>{
  const s=setup(side);s.pieces[side][0]=p(9);s.pieces[1-side][0]=p(9,1,0);s.pieces[1-side][1]=p(9,1,1);
  assert.ok(!legalMoves(s).some(m=>m.from===p(9)&&m.kind==='advance'&&m.to===p(7,1,0)));
- assert.equal(move(s,p(9),p(9,1,0),'sidestep').pieces[1-side][0],-1);
+ assert.ok(!legalMoves(s).some(m=>m.kind==='sidestep'&&m.from===p(9)));
+ s.pieces[1-side][1]=camp(1-side);assert.equal(move(s,p(9),p(9,1,0),'sidestep').pieces[1-side][0],-1);
  });
  test(`side ${side}: exact base hit returns attacker home and retains other dice`,()=>{
  const s=setup(side,[1,2,3]);s.pieces[side][0]=p(0);
@@ -86,3 +88,21 @@ test('reverse combination obeys walls and forged distance dice are rejected',()=
  s.pieces[1][1]=0;const m=legalMoves(s).find(m=>m.kind==='reverse');assert.ok(m);assert.throws(()=>applyMove(s,{...m,movementDie:0}));
  assert.ok(!validSave({...s,movedAgents:[0,0]}));
 });
+
+for(const side of [0,1]){
+ test(`side ${side}: six repairs one health, consumes one die and never captures`,()=>{
+  let s=setup(side,[6,6,2]);s.health[side]=3;s.pieces[1-side][0]=pos(side===0?8:3,0,0);const before=structuredClone(s.pieces);
+  const m=legalMoves(s).find(m=>m.kind==='repair');assert.ok(m);assert.ok(!legalMoves(s).some(m=>m.kind==='sweep'));
+  s=applyMove(s,m);assert.equal(s.health[side],4);assert.deepEqual(s.pieces,before);assert.deepEqual(s.dice,[null,6,2]);assert.equal(s.turn,side);assert.ok(validSave(s));
+  s=move(s,camp(side),camp(side),'repair');assert.equal(s.health[side],5);assert.ok(validSave(JSON.parse(JSON.stringify(s))));
+  s=selectExtremeDie({...s,dice:[6,null,2]},0);assert.ok(!legalMoves(s).some(m=>m.kind==='repair'));
+ });
+ test(`side ${side}: repair requires an agent at home and cannot exceed five`,()=>{
+  const s=setup(side,[6,1,2]);assert.ok(!legalMoves(s).some(m=>m.kind==='repair'));s.health[side]=4;
+  s.pieces[side]=Array.from({length:10},(_,i)=>i+1);assert.ok(!legalMoves(s).some(m=>m.kind==='repair'));
+ });
+ test(`side ${side}: computer can choose repair under the same rules`,()=>{
+  const s=setup(side,[6,6,6]);s.health[side]=1;
+  for(const difficulty of ['medium','hard']){const m=chooseMove(s,difficulty,()=>0);assert.equal(m.kind,'repair');assert.equal(applyMove(s,m).health[side],2);}
+ });
+}

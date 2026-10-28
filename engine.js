@@ -1,5 +1,5 @@
-import {initialExtreme,extremeMoves,extremeOutcome,applyExtreme,passExtreme,evaluateExtreme,validExtreme,rollExtreme,chooseExtreme} from './extreme.js?v=17';
-import {initialLinear,linearOutcome,linearMoves,applyLinear,evaluateLinear,validLinear,linearCamp,TURN_LIMIT,collectIntel} from './linear.js?v=17';
+import {initialExtreme,extremeMoves,extremeOutcome,applyExtreme,passExtreme,evaluateExtreme,validExtreme,rollExtreme,chooseExtreme} from './extreme.js?v=18';
+import {initialLinear,linearOutcome,linearMoves,applyLinear,evaluateLinear,validLinear,linearCamp,TURN_LIMIT,collectIntel} from './linear.js?v=18';
 export const VERSION=5;
 export const camp=linearCamp;
 export function initialState(mode='linear',random=Math.random){

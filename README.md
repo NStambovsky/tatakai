@@ -42,3 +42,7 @@ Extreme logic is isolated in extreme.js. Saves retain selected and unspent dice.
 ### Extreme dice combinations
 
 Each agent may use only one movement die per turn. Actions can stack on the same agent. Reverse on a 1 can combine with a second unused die to move backward by that die’s value, consuming both; this is the agent’s one movement die. Alternatively, the 1 can be spent as a one-step-back action. Movement eligibility follows the agent even after scoring and returning home. Route switches, strikes, recalls, vaults and coordinated attacks use actions. Unspent dice and movement locks survive reload. The full suite now passes 90 tests. The public release includes the shared v5 Linear/Ultra changes and Extreme; the existing v4 save data remains untouched.
+
+### Stronger Extreme protection and repair
+
+Vault may jump past a pair but cannot land on or capture either protected agent. Route switching can capture a lone enemy but cannot land on a protected pair. Strike Ahead and coordinated two-agent attacks remain the ways to break a pair. A six now repairs one base health using an agent at home, up to the maximum of five; each repair spends one die. The computer follows the same repair and protection rules. Current saves remain compatible. 96 tests pass.
