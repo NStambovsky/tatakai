@@ -52,3 +52,5 @@
 @media(max-width:560px){.board.extreme-board{padding:4px;gap:2px}.extreme-board .linear-center{font-size:8px;gap:6px}.extreme-board .linear-center strong{font-size:18px}.extreme-board .linear-center span{font-size:8px}.extreme-board .token{width:11px;height:11px}.extreme-board .space .number{font-size:7px;top:0;left:2px}.extreme-board .camp .number{font-size:20px}.extreme-board .camp-label{font-size:8px}}
 
 .space.home-faceoff{box-shadow:inset 0 0 0 2px #d77a57}.space.home-faceoff .tokens{gap:1px}#home-capture-options{grid-column:1/-1}#home-capture{grid-column:1/-1;font-size:12px;min-height:36px}#home-capture-options button{font-size:10px;padding:7px}
+
+.extreme-board .space.prepared-target{outline:2px dashed #e4a44d;outline-offset:1px}.extreme-board .space.preparing-agent{border-color:#e4a44d}#extreme-attack-status{margin:7px 0;line-height:1.4}

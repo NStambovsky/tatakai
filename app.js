@@ -1,6 +1,6 @@
-import {EXTREME_SPECIALS,extremeCamp,extremeRank,extremeRoute,extremePair,fullRow,selectExtremeDie,skipExtremeDie} from './extreme.js?v=19';
-import {LINEAR_SPECIALS,linearCamp,linearRank,CHECKPOINTS,INTEL_ROWS,TURN_LIMIT} from './linear.js?v=19';
-import { initialState, legalMoves, applyMove, passTurn, canPass, chooseMove, validSave, adjustRoll, chooseCommand, rollTurn, CARDS, upgradeCards, canBuyCard, buyCard, cardBlock, playCard, chooseCard } from './engine.js?v=19';
+import {EXTREME_SPECIALS,extremeCamp,extremeRank,extremeRoute,extremePair,fullRow,selectExtremeDie,skipExtremeDie} from './extreme.js?v=20';
+import {LINEAR_SPECIALS,linearCamp,linearRank,CHECKPOINTS,INTEL_ROWS,TURN_LIMIT} from './linear.js?v=20';
+import { initialState, legalMoves, applyMove, passTurn, canPass, chooseMove, validSave, adjustRoll, chooseCommand, rollTurn, CARDS, upgradeCards, canBuyCard, buyCard, cardBlock, playCard, chooseCard } from './engine.js?v=20';
 const $ = id => document.getElementById(id);
 const KEY = 'crosscamp-v5';
 let state = initialState(), difficulty = 'medium', selected = null, busy = false, lastMove = null, timer = null, generation = 0;
@@ -87,6 +87,7 @@ function render() {
       if(pos>0&&pos<25)tile.classList.add('enemy');
       if(pos===0||pos===49){tile.querySelector('.camp-label').textContent=pos===0?'RIVAL':'YOU';tile.querySelector('.number').textContent=`${state.health[pos===0?1:0]}♥`;tile.setAttribute('aria-label',tile.getAttribute('aria-label')+`, ${state.health[pos===0?1:0]} of 5 base health`);}
       else if(fullRow(state,rank,route)){tile.classList.add('blockade');tile.setAttribute('aria-label',tile.getAttribute('aria-label')+', full row: blocks passage');}
+      for(const a of state.pendingAttacks??[])if(pos===a.target){tile.classList.add('prepared-target');tile.setAttribute('aria-label',tile.getAttribute('aria-label')+`, ${a.ready?'prepared attack ready':'attack prepared: defender gets a response turn'}`);}else if(pos===a.from){tile.classList.add('preparing-agent');}
       board.append(tile);
     }
     const center=document.createElement('div');center.className='linear-center';center.innerHTML='<strong>EXTREME</strong><span>Two tracks per route</span><span>Pairs block passage</span><span>Two attackers break a pair</span><span>3 dice · 10 agents · 5 health</span>';board.append(center);
@@ -149,14 +150,14 @@ function render() {
   if(state.turn===0&&!busy&&active()){detail=state.roll===null?'Roll for forward distance and a special action, or skip.':`Roll ${state.roll}: advance ${state.roll}, use ${specials()[state.roll].name}, or skip.`;instruction=linearAction==='special'?'Choose an agent, then a special destination or the action button below.':'On your turf, capture invaders on landing. On theirs, landing on a defender gives them a response turn.';}
   if(!active()&&!state.draw&&(state.ply<TURN_LIMIT||state.health.includes(0)||state.pieces.some(a=>a.every(p=>p===-1)))){title=state.winner===0?'Victory.':'Defeat.';detail=state.health.includes(0)?'The enemy base has fallen. The base has no health left.':'All opposing agents have been captured.';if(state.winner===1)detail=state.health[0]===0?'Your base lost all its health.':'All your agents have been captured.';}
   if(state.mode!=='extreme'&&!active()&&state.ply>=TURN_LIMIT&&!state.health.includes(0)&&!state.pieces.some(a=>a.every(p=>p===-1))){title=state.draw?'Intelligence tied.':state.winner===0?'Victory on intelligence.':'Rival wins on intelligence.';detail=`Turn limit reached. Intelligence: you ${state.intel[0]}, rival ${state.intel[1]}.`;}
-  if(state.mode==='extreme'){if(active()&&state.turn===0&&!busy){detail=state.dice.length?`${state.dice.filter(Boolean).length} dice left. Choose a die, then move, use its special, attack with a pair, or skip that die.`:'Roll all three dice, then spend them separately in any order.';instruction='Pairs resist movement, route switches and Vault landings. Break them with Strike Ahead or two attackers. Each agent gets one movement die; actions can stack.';}if(state.draw)detail='160 turns completed. Start a new campaign.';}
+  if(state.mode==='extreme'){if(active()&&state.turn===0&&!busy){detail=state.dice.length?`${state.dice.filter(Boolean).length} dice left. Choose a die, then move, use its special, attack with a pair, or skip that die.`:'Roll all three dice, then spend them separately in any order.';instruction='Enemy pairs on your turf can be attacked now. Pairs on their own turf get a full response turn after you prepare an attack.';}if(state.draw)detail='160 turns completed. Start a new campaign.';}
   if(state.mode!=='extreme'&&active()&&state.turn===0&&!busy&&legalMoves(state).some(m=>m.kind==='capture')){detail='Capture enemy piece is ready, regardless of your roll. Capturing uses one action.';}
   $('status-title').textContent=title;$('status-detail').textContent=detail;$('selection').textContent=instruction;
 }
 function handleCell(pos) {
   if(!active()||busy||state.turn!==0)return;
   const moves=displayMoves();
-  if(selected!==null){const m=moves.find(m=>m.from===selected&&m.to===pos&&m.kind!=='reverse');if(m){execute(m);return;}}
+  if(selected!==null){const m=moves.find(m=>m.from===selected&&m.to===pos&&m.kind!=='reverse'&&!m.kind.startsWith('prepare-'));if(m){execute(m);return;}}
   selected=selected===pos?null:moves.some(m=>m.from===pos)?pos:null;
   render();
   if(selected!==null){const dest=document.querySelector('.available');dest?.focus({preventScroll:true});}
@@ -165,7 +166,7 @@ function execute(move) {
   const side=state.turn, rolled=state.mode==='extreme'?state.dice[move.dieIndex]:state.roll, beforeCoins=state.mode==='ultra'?state.coins[state.turn]:0, before=state.pieces[1-side].filter(p=>p>=0).length;
   state=applyMove(state,move);linearAction='move';lastMove={from:move.from,to:move.to};selected=null;
   const captured=state.pieces[1-side].filter(p=>p>=0).length<before;
-  addLog(`${side===0?'You':'Rival'}${move.kind==='capture'?' used an action':` rolled ${rolled}`}: ${move.kind==='capture'?'capture after response':move.kind==='reverse'?`reverse + ${rolled===1?'die '+(move.movementDie+1):''} (${Math.abs(move.steps)} backward)`:move.kind==='assault'?'coordinated attack':move.action==='special'?specials()[rolled].name:'advance '+rolled} · ${textPos(move.from)}${move.from!==move.to?' → '+textPos(move.to):''}${captured?' · enemy captured':move.contest?' · defender gets the first capture opportunity':''}.`);
+  addLog(`${side===0?'You':'Rival'}${move.kind==='capture'?' used an action':` rolled ${rolled}`}: ${move.kind.startsWith('prepare-')?`prepare ${move.kind.slice(8)} against ${textPos(move.target)} · defender gets a full response turn`:move.kind.startsWith('finish-')?'finish prepared attack':move.kind==='capture'?'capture after response':move.kind==='reverse'?`reverse + ${rolled===1?'die '+(move.movementDie+1):''} (${Math.abs(move.steps)} backward)`:move.kind==='assault'?'coordinated attack':move.action==='special'?specials()[rolled].name:'advance '+rolled} · ${textPos(move.from)}${move.from!==move.to?' → '+textPos(move.to):''}${captured?' · enemy captured':move.contest?' · defender gets the first capture opportunity':''}.`);
   if(move.kind==='repair')addLog(`${side===0?'You':'Rival'} repaired 1 base health · ${state.health[side]}/5 health.`);
   if(state.mode==='ultra'&&state.coins[side]>beforeCoins)addLog(`${side===0?'You':'Rival'} earned ${state.coins[side]-beforeCoins} coins.`);
   if(move.to===base(1-side))addLog(`${side===0?'You':'Rival'} dealt 1 base damage and returned home.`);
@@ -240,6 +241,13 @@ function renderHomeCaptures(){
  $('home-capture-note').textContent=captures.length?'Ready: capture uses one action, before or after rolling.':waiting?'Your invader must wait for the home defender’s full response turn.':'Home defenders capture first. If both stay through that response, the invader may capture next turn.';
  if(captures.length>1)for(const m of captures){const b=document.createElement('button');b.className='secondary';b.textContent=`Capture at ${textPos(m.from)}`;b.addEventListener('click',()=>execute(m));$('home-capture-options').append(b);}
 }
+function renderExtremeAttacks(){
+ const on=state.mode==='extreme';$('extreme-attack-status').hidden=!on;
+ if(!on)return;
+ const attacks=state.pendingAttacks??[];
+ $('extreme-attack-status').textContent=attacks.length?attacks.map(a=>a.attacker===0?a.ready?`Attack ready at ${textPos(a.target)}. Roll, select a die and choose Attack blockade to finish.`:`Attack prepared at ${textPos(a.target)}. Wait for the rival’s full response turn.`:`Your blockade at ${textPos(a.target)} is under attack. Move a blocker or eliminate the attacker to cancel it.`).join(' '):'Home-turf pairs get a response turn. Invading pairs can be attacked immediately.';
+ $('extreme-assault').textContent=attacks.some(a=>a.attacker===0&&a.ready)?'Finish attack / Attack blockade':'Attack blockade · two agents';
+}
 function renderExtremeDice(){
  const tray=$('extreme-dice'),on=state.mode==='extreme';tray.hidden=!on;$('skip-die').hidden=!on;$('die').hidden=on;tray.replaceChildren();
  if(!on)return;
@@ -248,6 +256,7 @@ function renderExtremeDice(){
 }
 $('skip-die').addEventListener('click',()=>{if(!active()||busy||state.turn!==0||state.roll===null)return;addLog(`You skipped die ${state.dieIndex+1} (${state.roll}).`);state=skipExtremeDie(state);selected=null;save();render();if(active()&&state.turn===1)scheduleAI();});
 function renderLinear(moves){
+  renderExtremeAttacks();
   $('linear-controls').hidden=false;$('extreme-assault').hidden=state.mode!=='extreme';
   const ready=active()&&state.turn===0&&!busy&&state.roll!==null;
   $('linear-move').textContent=state.roll?`Move forward ${state.roll}`:'Move forward';
@@ -258,11 +267,11 @@ function renderLinear(moves){
   $('command-status').textContent=`Command tokens: ${(state.commands?.[0]??0)} · adjust your die by one`;
   for(const [id,delta] of [['command-down',-1],['command-up',1]])$(id).disabled=!ready||state.rollLocked||!(state.commands?.[0]??0)||state.roll+delta<1||state.roll+delta>6;
   $('linear-options').replaceChildren();
-  if(linearAction==='assault')$('linear-note').textContent='Two of your agents must stand side by side immediately before an enemy pair. One captures a blocker; the other stays. Uses the selected die.';
+  if(linearAction==='assault')$('linear-note').textContent='Use two agents side by side before an enemy pair. On your turf, capture now. On their turf, prepare now and finish with another die after their full response turn. Ready strikes also finish here.';
   if(ready&&['special','assault'].includes(linearAction)){
-    const candidates=moves.filter(m=>selected===null?moves.length<=2:m.from===selected);
+    const candidates=moves.filter(m=>selected===null?moves.length<=2||m.kind.startsWith('finish-'):m.from===selected);
     if(!moves.length)$('linear-note').textContent+=' No eligible agent right now; move forward or skip instead.';
-    for(const m of candidates){const b=document.createElement('button');b.className='secondary';b.textContent=m.kind==='repair'?`Repair base · +1 health (${state.health[state.turn]}/5)`:(m.kind==='reverse'?`Reverse + die ${m.movementDie+1} (${Math.abs(m.steps)}) · `:'')+(m.target!==undefined?`Capture enemy at ${textPos(m.target)}`:`${textPos(m.from)} → ${textPos(m.to)}`);b.addEventListener('click',()=>execute(m));$('linear-options').append(b);}
+    for(const m of candidates){const b=document.createElement('button');b.className='secondary';b.textContent=m.kind.startsWith('prepare-')?`Prepare ${m.kind.slice(8)} at ${textPos(m.target)} · defender responds first`:m.kind.startsWith('finish-')?`Finish attack at ${textPos(m.target)} · use selected die`:m.kind==='repair'?`Repair base · +1 health (${state.health[state.turn]}/5)`:(m.kind==='reverse'?`Reverse + die ${m.movementDie+1} (${Math.abs(m.steps)}) · `:'')+(m.target!==undefined?`Capture enemy at ${textPos(m.target)}`:`${textPos(m.from)} → ${textPos(m.to)}`);b.addEventListener('click',()=>execute(m));$('linear-options').append(b);}
   }
 }
 for(const [id,action] of [['linear-move','move'],['linear-special','special'],['extreme-assault','assault']])$(id).addEventListener('click',()=>{if(busy||state.turn!==0||state.roll===null||!active())return;linearAction=action;selected=null;render();});

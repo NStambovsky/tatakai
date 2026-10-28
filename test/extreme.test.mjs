@@ -106,3 +106,36 @@ for(const side of [0,1]){
   for(const difficulty of ['medium','hard']){const m=chooseMove(s,difficulty,()=>0);assert.equal(m.kind,'repair');assert.equal(applyMove(s,m).health[side],2);}
  });
 }
+
+for(const side of [0,1]){
+ const p=(rank,lane=0)=>pos(side===0?rank:11-rank,0,lane);
+ function siege(type='assault'){
+  const s=setup(side,[3,1,2]);s.pieces[side][0]=p(3);s.pieces[side][1]=p(3,1);s.pieces[1-side][0]=p(2);s.pieces[1-side][1]=p(2,1);
+  const m=legalMoves(s).find(m=>m.from===p(3)&&m.target===p(2)&&m.kind===`prepare-${type}`);assert.ok(m);return applyMove(s,m);
+ }
+ test(`side ${side}: home-turf blockade needs preparation and a full defender response`,()=>{
+  let s=siege();assert.equal(s.pieces[1-side][0],p(2));assert.equal(s.pieces[side][0],p(3));assert.equal(s.pendingAttacks[0].ready,false);assert.equal(s.dice.filter(Boolean).length,2);assert.ok(validSave(s));
+  for(let i=1;i<3;i++)assert.ok(!legalMoves(selectExtremeDie(s,i)).some(m=>m.kind.startsWith('finish-')));
+  s=passTurn(s);assert.equal(s.turn,1-side);assert.equal(s.pendingAttacks[0].ready,false);s=passTurn(s);assert.equal(s.turn,side);assert.equal(s.pendingAttacks[0].ready,true);assert.ok(validSave(JSON.parse(JSON.stringify(s))));
+  for(let face=1;face<=6;face++){const rolled=rollTurn(s,[face,1,2]);const m=legalMoves(rolled).find(m=>m.kind==='finish-assault');assert.ok(m);const n=applyMove(rolled,m);assert.equal(n.pieces[1-side][0],-1);assert.equal(n.pieces[side][0],p(2));assert.equal(n.pieces[side][1],p(3,1));assert.equal(n.dice.filter(Boolean).length,2);assert.deepEqual(n.pendingAttacks,[]);assert.ok(validSave(n));}
+ });
+ test(`side ${side}: Strike Ahead also gives home pairs a response`,()=>{
+  let s=siege('strike');assert.equal(s.pieces[1-side][0],p(2));assert.ok(!legalMoves(s).some(m=>m.kind==='finish-strike'));s=rollTurn(passTurn(passTurn(s)),[6,1,2]);const m=legalMoves(s).find(m=>m.kind==='finish-strike');assert.ok(m);const n=applyMove(s,m);assert.equal(n.pieces[1-side][0],-1);assert.equal(n.pieces[side][0],p(3));assert.ok(validSave(n));
+ });
+ test(`side ${side}: moving a defender, attacker or supporter cancels preparation`,()=>{
+  const before=siege();for(const piece of [0,1]){let s=selectExtremeDie(rollTurn(passTurn(before),[1,2,4]),2);const m=legalMoves(s).find(m=>m.piece===piece&&m.kind==='recall');assert.ok(m);const n=applyMove(s,m);assert.deepEqual(n.pendingAttacks,[]);assert.ok(validSave(n));}
+  for(const piece of [0,1]){const s=selectExtremeDie(siege(),2);const m=legalMoves(s).find(m=>m.piece===piece&&m.kind==='sidestep');assert.ok(m);const n=applyMove(s,m);assert.deepEqual(n.pendingAttacks,[]);assert.ok(validSave(n));}
+ });
+ test(`side ${side}: capture of an attacker cancels its queued attack`,()=>{
+  let s=rollTurn(passTurn(siege()),[3,1,1]);
+  const m=legalMoves(s).find(m=>m.kind==='strike'&&m.target===p(3));assert.ok(m);const n=applyMove(s,m);assert.equal(n.pieces[side][0],-1);assert.deepEqual(n.pendingAttacks,[]);assert.ok(validSave(n));
+ });
+ test(`side ${side}: enemy pairs invading my turf remain immediately attackable`,()=>{
+  const s=setup(side,[3,1,2]);s.pieces[side][0]=p(9);s.pieces[side][1]=p(9,1);s.pieces[1-side][0]=p(8);s.pieces[1-side][1]=p(8,1);
+  for(const kind of ['strike','assault']){const m=legalMoves(s).find(m=>m.from===p(9)&&m.target===p(8)&&m.kind===kind);assert.ok(m);assert.equal(applyMove(s,m).pieces[1-side][0],-1);}
+ });
+ test(`side ${side}: forged ready attacks and changed targets are rejected`,()=>{
+  const s=siege(),a=s.pendingAttacks[0];assert.ok(!validSave({...s,pendingAttacks:[{...a,target:p(1)}]}));assert.ok(!validSave({...s,pendingAttacks:[a,a]}));assert.ok(!validSave({...s,pendingAttacks:[{...a,supportPiece:a.piece}]}));
+  const m=legalMoves(s).find(m=>m.kind==='prepare-assault');assert.ok(m);assert.throws(()=>applyMove(s,{...m,kind:'finish-assault'}));
+ });
+}
