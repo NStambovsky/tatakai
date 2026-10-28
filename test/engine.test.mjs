@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {initialState,legalMoves,applyMove,passTurn,rollTurn,adjustRoll,chooseCommand,validSave,chooseMove,chooseCard,playCard,buyCard} from '../engine.js';
 import {TURN_LIMIT,linearCamp} from '../linear.js';
 const move=(s,from,to,kind='advance')=>{const m=legalMoves(s).find(m=>m.from===from&&m.to===to&&m.kind===kind);assert.ok(m,`${from} -> ${to}: ${kind}`);return applyMove(s,m);};
-test('Linear and Ultra remain supported; default is Linear',()=>{assert.equal(initialState().mode,'linear');assert.throws(()=>initialState('classic'));for(const mode of ['linear','ultra'])assert.ok(validSave(initialState(mode)));});
+test('Linear and Ultra remain supported; default is Linear',()=>{assert.equal(initialState().mode,'linear');assert.throws(()=>initialState('unknown'));assert.ok(validSave(initialState('classic')));for(const mode of ['linear','ultra'])assert.ok(validSave(initialState(mode)));});
 for(const mode of ['linear','ultra'])for(const side of [0,1]){
  const flip=p=>side===0?p:25-p;
  test(`${mode}/${side}: checkpoint blocks jumps, not capture landings; other enemies may be jumped`,()=>{
@@ -31,7 +31,7 @@ test('timer resolves intelligence and otherwise draws; damage still takes preced
  const s=initialState();s.ply=TURN_LIMIT-1;s.roll=1;s.pieces[0][0]=1;s.health[1]=1;s.intel=[0,1];const n=move(s,1,0);assert.equal(n.winner,0);assert.ok(validSave(n));
 });
 test('invalid saves are rejected without throwing',()=>{
- const s=initialState();for(const bad of [null,{}, {...s,version:4},{...s,mode:'classic'},{...s,commands:null},{...s,intel:null},{...s,pieces:[{},[]]},{...s,pieces:null},{...s,health:[0,0]},{...s,commands:[3,0]},{...s,intel:[2,0]}])assert.equal(validSave(bad),false);
+ const s=initialState();for(const bad of [null,{}, {...s,version:4},{...s,mode:'unknown'},{...s,commands:null},{...s,intel:null},{...s,pieces:[{},[]]},{...s,pieces:null},{...s,health:[0,0]},{...s,commands:[3,0]},{...s,intel:[2,0]}])assert.equal(validSave(bad),false);
 });
 test('AI uses a Command for an immediate win',()=>{const s=initialState();s.roll=2;s.pieces[0][0]=1;s.health[1]=1;assert.equal(chooseCommand(s,'medium'),-1);});
 test('both modes have identical board actions and effects',()=>{

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {initialState,legalMoves,applyMove,passTurn,rollTurn,validSave,chooseMove} from '../engine.js';
 function capture(s){const m=legalMoves(s).find(m=>m.kind==='capture');assert.ok(m,'capture ready');return applyMove(s,m);}
 function approach(mode,home,pos=19){const flip=p=>home===0?p:25-p;const s=initialState(mode);s.turn=1-home;s.roll=1;s.pieces[home][0]=flip(pos);s.pieces[1-home][0]=flip(pos-2);const m=legalMoves(s).find(m=>m.from===flip(pos-2)&&m.to===flip(pos)&&m.kind==='advance');assert.ok(m?.contest);return applyMove(s,m);}
-for(const mode of ['linear','ultra'])for(const home of [0,1]){
+for(const mode of ['classic','linear','ultra'])for(const home of [0,1]){
  test(`${mode}/${home}: defender captures first without rolling; invader survives arrival`,()=>{
   const s=approach(mode,home);assert.equal(s.turn,home);assert.equal(s.pieces[0][0],s.pieces[1][0]);assert.equal(s.pendingCaptures[0].ready,false);assert.ok(validSave(s));assert.ok(validSave(JSON.parse(JSON.stringify(s))));
   const n=capture(s);assert.equal(n.pieces[1-home][0],-1);assert.notEqual(n.pieces[home][0],-1);assert.deepEqual(n.pendingCaptures,[]);assert.ok(validSave(n));

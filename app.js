@@ -1,6 +1,6 @@
-import {EXTREME_SPECIALS,ROLE_INFO,pieceRole,guardBlockade,upgradeExtreme,extremeCamp,extremeRank,extremeRoute,extremePair,fullRow,selectExtremeDie,skipExtremeDie} from './extreme.js?v=21';
-import {LINEAR_SPECIALS,linearCamp,linearRank,CHECKPOINTS,INTEL_ROWS,TURN_LIMIT} from './linear.js?v=21';
-import { initialState, legalMoves, applyMove, passTurn, canPass, chooseMove, validSave, adjustRoll, chooseCommand, rollTurn, CARDS, upgradeCards, canBuyCard, buyCard, cardBlock, playCard, chooseCard } from './engine.js?v=21';
+import {EXTREME_SPECIALS,ROLE_INFO,pieceRole,guardBlockade,upgradeExtreme,extremeCamp,extremeRank,extremeRoute,extremePair,fullRow,selectExtremeDie,skipExtremeDie} from './extreme.js?v=22';
+import {LINEAR_SPECIALS,linearCamp,linearRank,CHECKPOINTS,INTEL_ROWS,TURN_LIMIT} from './linear.js?v=22';
+import { initialState, legalMoves, applyMove, passTurn, canPass, chooseMove, validSave, adjustRoll, chooseCommand, rollTurn, CARDS, upgradeCards, canBuyCard, buyCard, cardBlock, playCard, chooseCard } from './engine.js?v=22';
 const $ = id => document.getElementById(id);
 const KEY = 'crosscamp-v5';
 let state = initialState(), difficulty = 'medium', selected = null, busy = false, lastMove = null, timer = null, generation = 0;
@@ -34,7 +34,8 @@ function rollDie() {
   return a[0]%6+1;
 }
 function base(side){return state.mode==='extreme'?extremeCamp(side):linearCamp(side);}
-function specials(){return state.mode==='extreme'?EXTREME_SPECIALS:LINEAR_SPECIALS;}
+const CLASSIC_ACTIONS=Object.fromEntries([1,2,3,4,5,6].map(n=>[n,{name:'Retreat one',text:'Instead of moving forward, move one field piece backward exactly one space. Uses your turn.'}]));
+function specials(){return state.mode==='classic'?CLASSIC_ACTIONS:state.mode==='extreme'?EXTREME_SPECIALS:LINEAR_SPECIALS;}
 function healthMax(){return state.mode==='extreme'?5:3;}
 function turnDice(){return state.mode==='extreme'?[rollDie(),rollDie(),rollDie()]:rollDie();}
 function displayMoves(){return legalMoves(state).filter(m=>(m.action===linearAction||m.action==='capture')&&(state.mode!=='extreme'||m.from!==base(state.turn)||state.turn!==0||pieceRole(state,0,m.piece)===deployRole));}
@@ -44,10 +45,11 @@ function addLog(message) { log.unshift(message); log=log.slice(0,6); }
 function active() { return state.winner===null && !state.draw; }
 function render() {
   document.querySelector('.intro .eyebrow').textContent=state.mode==='extreme'?'TEN AGENTS. THREE DICE.':'SIX AGENTS. ONE OPENING.';
+  $('classic-rules').hidden=state.mode!=='classic';$('advanced-rules').hidden=state.mode==='classic';
   $('difficulty').value=difficulty;
   $('rival-card-summary').hidden=!rivalCard;
   $('rival-card-summary').textContent=rivalCard?`Last rival card: ${CARDS[rivalCard.kind].name} · ${rivalCard.effect}`:'';
-  $('mode-label').textContent=state.mode==='extreme'?'EXTREME · Three dice & blockades':state.mode==='ultra'?'ULTRA · Routes, cards & coins':'LINEAR · Routes & commands';
+  $('mode-label').textContent=state.mode==='classic'?'CLASSIC · One die. One choice.':state.mode==='extreme'?'EXTREME · Three dice & blockades':state.mode==='ultra'?'ULTRA · Routes, cards & coins':'LINEAR · Routes & commands';
   $('difficulty-note').textContent=notes[difficulty];
   $('rival-info').textContent=`Computer · ${difficulty[0].toUpperCase()+difficulty.slice(1)}`;
   const moves = state.turn===0 && !busy ? displayMoves() : [];
@@ -119,13 +121,13 @@ function render() {
         const invaders=counts(pos,pos===0?0:1);
         if(invaders){const badge=document.createElement('span');badge.className='infiltrator-count';badge.textContent=`+${invaders} enemy`;tile.append(badge);}
       }
-      if(CHECKPOINTS.includes(pos)){tile.classList.add('checkpoint');tile.setAttribute('aria-label',tile.getAttribute('aria-label')+', checkpoint: blocks enemy jumps');}
-      for(const side of [0,1])if(!state.intel[side]&&INTEL_ROWS[side].includes(pos)){tile.classList.add('intel-space');const mark=document.createElement('span');mark.className='objective-marker';mark.textContent='◆';mark.setAttribute('aria-hidden','true');tile.append(mark);tile.setAttribute('aria-label',tile.getAttribute('aria-label')+`, intelligence for ${side===0?'you':'rival'}`);}
+      if(state.mode!=='classic'&&CHECKPOINTS.includes(pos)){tile.classList.add('checkpoint');tile.setAttribute('aria-label',tile.getAttribute('aria-label')+', checkpoint: blocks enemy jumps');}
+      for(const side of [0,1])if(state.mode!=='classic'&&!state.intel[side]&&INTEL_ROWS[side].includes(pos)){tile.classList.add('intel-space');const mark=document.createElement('span');mark.className='objective-marker';mark.textContent='◆';mark.setAttribute('aria-hidden','true');tile.append(mark);tile.setAttribute('aria-label',tile.getAttribute('aria-label')+`, intelligence for ${side===0?'you':'rival'}`);}
       for(const side of [0,1])if(state.mode==='ultra'&&state.bounties[side]!==null&&state.pieces[1-side][state.bounties[side]]===pos){tile.classList.add('marked-agent');tile.setAttribute('aria-label',tile.getAttribute('aria-label')+', bounty target');}
       board.append(tile);
     }
     const center=document.createElement('div');center.className='linear-center';
-    center.innerHTML=`<strong>${state.mode.toUpperCase()}</strong><span>◆ Intel: you ${state.intel[0]} · rival ${state.intel[1]}</span><span>Commands: you ${(state.commands?.[0]??0)} · rival ${state.commands[1]}</span><span>Turn ${Math.min(state.ply+1,TURN_LIMIT)} / ${TURN_LIMIT}</span>`;
+    center.innerHTML=state.mode==='classic'?`<strong>CLASSIC</strong><span>Six pieces · One die</span><span>Commands: you ${state.commands[0]} · rival ${state.commands[1]}</span><span>Three hits win</span>`:`<strong>${state.mode.toUpperCase()}</strong><span>◆ Intel: you ${state.intel[0]} · rival ${state.intel[1]}</span><span>Commands: you ${(state.commands?.[0]??0)} · rival ${state.commands[1]}</span><span>Turn ${Math.min(state.ply+1,TURN_LIMIT)} / ${TURN_LIMIT}</span>`;
     board.append(center);
     for(const corner of ['near','far']){const bend=document.createElement('span');bend.className='linear-bend '+corner;bend.textContent='6 ↔ 6';board.append(bend);}
   }
@@ -133,7 +135,7 @@ function render() {
   $('your-count').textContent=`${state.pieces[0].filter(p=>p>=0).length} agents · ${state.health[0]}/${healthMax()} health`;
   $('turn-number').textContent=String(state.ply+1).padStart(2,'0');
   renderExtremeDice();
-  $('board-key-linear').lastElementChild.textContent=state.mode==='extreme'?'Outlined pairs block passage · Tracks are interchangeable':'◆ Intelligence · Outlined checkpoints block jumps';
+  $('board-key-linear').lastElementChild.textContent=state.mode==='classic'?'Two routes · One action per turn':state.mode==='extreme'?'Outlined pairs block passage · Tracks are interchangeable':'◆ Intelligence · Outlined checkpoints block jumps';
   $('roll').textContent=state.mode==='extreme'?'Roll 3 dice ↗':'Roll the die ↗';
   $('die').textContent=dice[state.roll??0];
   $('die').setAttribute('aria-label',state.roll?`Rolled ${state.roll}`:'Die not rolled');
@@ -160,8 +162,9 @@ function render() {
   }
   if(state.turn===0&&!busy&&active()){detail=state.roll===null?'Roll for forward distance and a special action, or skip.':`Roll ${state.roll}: advance ${state.roll}, use ${specials()[state.roll].name}, or skip.`;instruction=linearAction==='special'?'Choose an agent, then a special destination or the action button below.':'On your turf, capture invaders on landing. On theirs, landing on a defender gives them a response turn.';}
   if(!active()&&!state.draw&&(state.ply<TURN_LIMIT||state.health.includes(0)||state.pieces.some(a=>a.every(p=>p===-1)))){title=state.winner===0?'Victory.':'Defeat.';detail=state.health.includes(0)?'The enemy base has fallen. The base has no health left.':'All opposing agents have been captured.';if(state.winner===1)detail=state.health[0]===0?'Your base lost all its health.':'All your agents have been captured.';}
-  if(state.mode!=='extreme'&&!active()&&state.ply>=TURN_LIMIT&&!state.health.includes(0)&&!state.pieces.some(a=>a.every(p=>p===-1))){title=state.draw?'Intelligence tied.':state.winner===0?'Victory on intelligence.':'Rival wins on intelligence.';detail=`Turn limit reached. Intelligence: you ${state.intel[0]}, rival ${state.intel[1]}.`;}
+  if(!['classic','extreme'].includes(state.mode)&&!active()&&state.ply>=TURN_LIMIT&&!state.health.includes(0)&&!state.pieces.some(a=>a.every(p=>p===-1))){title=state.draw?'Intelligence tied.':state.winner===0?'Victory on intelligence.':'Rival wins on intelligence.';detail=`Turn limit reached. Intelligence: you ${state.intel[0]}, rival ${state.intel[1]}.`;}
   if(state.mode==='extreme'){if(active()&&state.turn===0&&!busy){detail=state.dice.length?`${state.dice.filter(Boolean).length} dice left. Choose a die, then move, use its special, attack with a pair, or skip that die.`:'Roll all three dice, then spend them separately in any order.';instruction='Enemy pairs on your turf can be attacked now. Pairs on their own turf get a full response turn after you prepare an attack.';}if(state.draw)detail='160 turns completed. Start a new campaign.';}
+  if(state.mode==='classic'){if(active()&&state.turn===0&&!busy){detail=state.roll===null?'Roll, capture if ready, or skip.':`Roll ${state.roll}: advance ${state.roll}, retreat one, capture if ready, or skip.`;instruction='Choose one piece and a destination. Command tokens adjust a roll by one.';}if(state.draw)detail='160 turns completed. The campaign is a draw.';}
   if(state.mode!=='extreme'&&active()&&state.turn===0&&!busy&&legalMoves(state).some(m=>m.kind==='capture')){detail='Capture enemy piece is ready, regardless of your roll. Capturing uses one action.';}
   $('status-title').textContent=title;$('status-detail').textContent=detail;$('selection').textContent=instruction;
 }
@@ -284,9 +287,9 @@ function renderLinear(moves){
   const ready=active()&&state.turn===0&&!busy&&state.roll!==null;
   const selectedRole=state.mode==='extreme'?(selected!==null&&selected!==49?pieceRole(state,0,state.pieces[0].indexOf(selected)):deployRole):'agent';
   $('linear-move').textContent=state.roll?selectedRole==='runner'?`Runner: move 1–${state.roll}`:`Move forward ${state.roll}`:'Move forward';
-  $('linear-special').textContent=state.roll?`Special: ${specials()[state.roll].name}`:'Special action';
+  $('linear-special').textContent=state.mode==='classic'?'Retreat one':state.roll?`Special: ${specials()[state.roll].name}`:'Special action';
   for(const [id,action] of [['linear-move','move'],['linear-special','special'],['extreme-assault','assault']]){$(id).disabled=!ready;$(id).setAttribute('aria-pressed',String(linearAction===action));}
-  $('linear-note').textContent=state.roll?specials()[state.roll].text:state.mode==='extreme'?'Roll three dice. Each die buys one move, special, or coordinated attack.':'Each die face has its own optional special. Choose one action per turn.';
+  $('linear-note').textContent=state.mode==='classic'?'After rolling, advance one piece by the die, retreat one, capture if ready, or skip.':state.roll?specials()[state.roll].text:state.mode==='extreme'?'Roll three dice. Each die buys one move, special, or coordinated attack.':'Each die face has its own optional special. Choose one action per turn.';
   $('command-status').hidden=state.mode==='extreme';$('command-controls').hidden=state.mode==='extreme';
   $('command-status').textContent=`Command tokens: ${(state.commands?.[0]??0)} · adjust your die by one`;
   for(const [id,delta] of [['command-down',-1],['command-up',1]])$(id).disabled=!ready||state.rollLocked||!(state.commands?.[0]??0)||state.roll+delta<1||state.roll+delta>6;

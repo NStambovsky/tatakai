@@ -1,10 +1,10 @@
-import {initialExtreme,extremeMoves,extremeOutcome,applyExtreme,passExtreme,evaluateExtreme,validExtreme,rollExtreme,chooseExtreme} from './extreme.js?v=21';
-import {initialLinear,linearOutcome,linearMoves,applyLinear,evaluateLinear,validLinear,linearCamp,TURN_LIMIT,collectIntel,finishResponse} from './linear.js?v=21';
+import {initialExtreme,extremeMoves,extremeOutcome,applyExtreme,passExtreme,evaluateExtreme,validExtreme,rollExtreme,chooseExtreme} from './extreme.js?v=22';
+import {initialLinear,linearOutcome,linearMoves,applyLinear,evaluateLinear,validLinear,linearCamp,TURN_LIMIT,collectIntel,finishResponse} from './linear.js?v=22';
 export const VERSION=5;
 export const camp=linearCamp;
 export function initialState(mode='linear',random=Math.random){
  if(mode==='extreme')return initialExtreme();
- if(!['linear','ultra'].includes(mode))throw new Error('Unknown mode');
+ if(!['classic','linear','ultra'].includes(mode))throw new Error('Unknown mode');
  const s={...initialLinear(),mode};
  if(mode==='ultra')Object.assign(s,{coins:[3,3],forcedRolls:[null,null],powerUsed:false,rollLocked:false});
  return upgradeCards(s,random);
@@ -51,7 +51,7 @@ export function chooseCommand(s,difficulty='medium'){
 export function validSave(s){
  if(s?.mode==='extreme')return validExtreme(s);
  if(!validLinear(s))return false;
- if(s.mode==='linear')return s.cardVersion===undefined;
+ if(['classic','linear'].includes(s.mode))return s.cardVersion===undefined;
  return Array.isArray(s.coins)&&s.coins.length===2&&s.coins.every(c=>Number.isInteger(c)&&c>=0&&c<=2000)&&
  Array.isArray(s.forcedRolls)&&s.forcedRolls.length===2&&s.forcedRolls.every(r=>r===null||Number.isInteger(r)&&r>=1&&r<=6)&&
  typeof s.rollLocked==='boolean'&&(!s.rollLocked||s.roll!==null)&&typeof s.extraUsed==='boolean'&&(!s.extraActions||s.extraUsed)&&s.extraActions<=1&&validCards(s)&&s.cardVersion===1;
