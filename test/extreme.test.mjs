@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {initialState,legalMoves,applyMove,rollTurn,passTurn,chooseMove,validSave} from '../engine.js';
-import {extremePos as pos,extremeCamp as camp,selectExtremeDie,skipExtremeDie,fullRow} from '../extreme.js';
+import {extremePos as pos,extremeCamp as camp,selectExtremeDie,skipExtremeDie,fullRow,pieceRole} from '../extreme.js';
 function setup(side=0,values=[2,3,6]){const s=initialState('extreme');s.turn=side;return rollTurn(s,values);}
 function move(s,from,to,kind='advance'){const m=legalMoves(s).find(m=>m.from===from&&m.to===to&&m.kind===kind);assert.ok(m,`${from}→${to} ${kind}`);return applyMove(s,m);}
 test('Extreme starts with ten agents, five health and exactly three independently selectable dice',()=>{
@@ -11,7 +11,7 @@ test('Extreme starts with ten agents, five health and exactly three independentl
 for(const side of [0,1]){
  const rank=r=>side===0?r:11-r;
  const p=(r,route=0,lane=0)=>pos(rank(r),route,lane);
- test(`side ${side}: can deploy onto both tracks of both routes`,()=>{const s=setup(side);assert.equal(legalMoves(s).filter(m=>m.kind==='advance').length,4);});
+ test(`side ${side}: can deploy onto both tracks of both routes`,()=>{const s=setup(side);for(const [role,count] of [['agent',4],['guard',4],['runner',8]])assert.equal(legalMoves(s).filter(m=>m.kind==='advance'&&pieceRole(s,side,m.piece)===role).length,count);});
  test(`side ${side}: weaves around single agents and can choose either landing track`,()=>{
  const s=setup(side);s.pieces[side][0]=p(9);s.pieces[side][1]=p(8);s.pieces[1-side][0]=p(7,0,0);
  assert.equal(move(s,p(9),p(7,0,0)).pieces[1-side][0],-1);assert.ok(move(s,p(9),p(7,0,1)));s.pieces[1-side][0]=p(8,0,1);

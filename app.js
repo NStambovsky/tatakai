@@ -1,10 +1,10 @@
-import {EXTREME_SPECIALS,extremeCamp,extremeRank,extremeRoute,extremePair,fullRow,selectExtremeDie,skipExtremeDie} from './extreme.js?v=20';
-import {LINEAR_SPECIALS,linearCamp,linearRank,CHECKPOINTS,INTEL_ROWS,TURN_LIMIT} from './linear.js?v=20';
-import { initialState, legalMoves, applyMove, passTurn, canPass, chooseMove, validSave, adjustRoll, chooseCommand, rollTurn, CARDS, upgradeCards, canBuyCard, buyCard, cardBlock, playCard, chooseCard } from './engine.js?v=20';
+import {EXTREME_SPECIALS,ROLE_INFO,pieceRole,guardBlockade,upgradeExtreme,extremeCamp,extremeRank,extremeRoute,extremePair,fullRow,selectExtremeDie,skipExtremeDie} from './extreme.js?v=21';
+import {LINEAR_SPECIALS,linearCamp,linearRank,CHECKPOINTS,INTEL_ROWS,TURN_LIMIT} from './linear.js?v=21';
+import { initialState, legalMoves, applyMove, passTurn, canPass, chooseMove, validSave, adjustRoll, chooseCommand, rollTurn, CARDS, upgradeCards, canBuyCard, buyCard, cardBlock, playCard, chooseCard } from './engine.js?v=21';
 const $ = id => document.getElementById(id);
 const KEY = 'crosscamp-v5';
 let state = initialState(), difficulty = 'medium', selected = null, busy = false, lastMove = null, timer = null, generation = 0;
-let linearAction='move';
+let linearAction='move',deployRole='agent';
 let cardTab='hand', rivalCard=null, revealDone=null;
 let log = ['The camps are quiet. You move first.'];
 const notes = {easy:'Explores freely. A gentle opponent for learning the board.',medium:'Looks for captures and keeps an eye on camp.',hard:'Plans around your best reply across all six possible rolls.'};
@@ -17,6 +17,7 @@ try {
   const data = JSON.parse(localStorage.getItem(KEY));
 
   if(data?.state?.mode==='extreme'&&data.state.movedAgents===undefined){data.state.movedAgents=data.state.dice?.length?data.state.pieces[data.state.turn].map((p,i)=>p>0&&p<49?i:null).filter(i=>i!==null):[];}
+  if(data)data.state=upgradeExtreme(data.state);
   if (data && validSave(data.state)) {
     state=upgradeCards(data.state,random);
     if (Object.hasOwn(notes,data.difficulty)) difficulty=data.difficulty;
@@ -36,7 +37,7 @@ function base(side){return state.mode==='extreme'?extremeCamp(side):linearCamp(s
 function specials(){return state.mode==='extreme'?EXTREME_SPECIALS:LINEAR_SPECIALS;}
 function healthMax(){return state.mode==='extreme'?5:3;}
 function turnDice(){return state.mode==='extreme'?[rollDie(),rollDie(),rollDie()]:rollDie();}
-function displayMoves(){return legalMoves(state).filter(m=>m.action===linearAction||m.action==='capture');}
+function displayMoves(){return legalMoves(state).filter(m=>(m.action===linearAction||m.action==='capture')&&(state.mode!=='extreme'||m.from!==base(state.turn)||state.turn!==0||pieceRole(state,0,m.piece)===deployRole));}
 function textPos(pos){if(state.mode==='extreme')return pos===49?'your base':pos===0?'rival base':`${extremeRank(pos)<6?'rival':'your'} ${Math.min(extremeRank(pos)+1,12-extremeRank(pos))}, ${extremeRoute(pos)===0?'upper':'lower'} route, track ${(pos-1)%2+1}`;return pos===25?'your base':pos===0?'rival base':`${pos<=12?'rival':'your'} ${Math.min(linearRank(pos)+1,12-linearRank(pos))}, ${pos%2?'upper':'lower'} route`;}
 function counts(pos,side) { return state.pieces[side].filter(p=>p===pos).length; }
 function addLog(message) { log.unshift(message); log=log.slice(0,6); }
@@ -50,6 +51,7 @@ function render() {
   $('difficulty-note').textContent=notes[difficulty];
   $('rival-info').textContent=`Computer · ${difficulty[0].toUpperCase()+difficulty.slice(1)}`;
   const moves = state.turn===0 && !busy ? displayMoves() : [];
+  renderArmy();
   renderLinear(moves);
   const destinations = selected===null ? [] : moves.filter(m=>m.from===selected).map(m=>m.to);
   const board=$('board'); board.classList.add('linear-board');board.classList.toggle('extreme-board',state.mode==='extreme');board.replaceChildren();
@@ -70,7 +72,15 @@ function render() {
     const num=document.createElement('span');num.className='number';num.textContent=isCamp?'⌂':state.mode==='extreme'?Math.min(extremeRank(pos)+1,12-extremeRank(pos)):Math.min(linearRank(pos)+1,12-linearRank(pos));b.append(num);
     if(isCamp){const label=document.createElement('span');label.className='camp-label';label.textContent=pos===0?'RIVAL CAMP':'YOUR CAMP';b.append(label);}
     const tokens=document.createElement('span');tokens.className='tokens';
-    for(const s of [1,0])for(let i=0;i<counts(pos,s);i++){const token=document.createElement('span');token.className=`token ${s===1?'black':''}`;tokens.append(token);}
+    for(const side of [1,0])for(const [piece,p] of state.pieces[side].entries())if(p===pos){
+      const token=document.createElement('span');token.className=`token ${side===1?'black':''}`;
+      if(state.mode==='extreme'){
+        const role=pieceRole(state,side,piece),info=ROLE_INFO[role];token.classList.add(`role-${role}`);token.textContent=role==='agent'?'':info.symbol;token.title=`${side===0?'Your':'Rival'} ${info.name}`;
+        b.setAttribute('aria-label',b.getAttribute('aria-label')+`, ${side===0?'Ivory':'rival'} ${info.name}`);
+        if(side===state.turn&&state.movedAgents.includes(piece)){token.classList.add('movement-spent');token.title+=' · movement die used';}
+      }
+      tokens.append(token);
+    }
     b.append(tokens);
     b.addEventListener('click',()=>handleCell(pos));
     return b;
@@ -87,10 +97,11 @@ function render() {
       if(pos>0&&pos<25)tile.classList.add('enemy');
       if(pos===0||pos===49){tile.querySelector('.camp-label').textContent=pos===0?'RIVAL':'YOU';tile.querySelector('.number').textContent=`${state.health[pos===0?1:0]}♥`;tile.setAttribute('aria-label',tile.getAttribute('aria-label')+`, ${state.health[pos===0?1:0]} of 5 base health`);}
       else if(fullRow(state,rank,route)){tile.classList.add('blockade');tile.setAttribute('aria-label',tile.getAttribute('aria-label')+', full row: blocks passage');}
+      if(pos>0&&pos<49&&guardBlockade(state,rank,route)){tile.classList.add('guard-wall');tile.setAttribute('aria-label',tile.getAttribute('aria-label')+', Guard blockade: cannot be vaulted');}
       for(const a of state.pendingAttacks??[])if(pos===a.target){tile.classList.add('prepared-target');tile.setAttribute('aria-label',tile.getAttribute('aria-label')+`, ${a.ready?'prepared attack ready':'attack prepared: defender gets a response turn'}`);}else if(pos===a.from){tile.classList.add('preparing-agent');}
       board.append(tile);
     }
-    const center=document.createElement('div');center.className='linear-center';center.innerHTML='<strong>EXTREME</strong><span>Two tracks per route</span><span>Pairs block passage</span><span>Two attackers break a pair</span><span>3 dice · 10 agents · 5 health</span>';board.append(center);
+    const center=document.createElement('div');center.className='linear-center';center.innerHTML=`<strong>EXTREME</strong><span>● Agent · ◆ Guard · ➤ Runner</span><span>Guard pairs stop Vault</span><span>Runners move 1–die, no captures</span><span>Repair tokens: you ${state.repairsRemaining[0]} · rival ${state.repairsRemaining[1]}</span>`;board.append(center);
     for(const corner of ['near','far']){const bend=document.createElement('span');bend.className='linear-bend '+corner;bend.textContent='6 ↔ 6';board.append(bend);}
   }else{
     for(let pos=0;pos<=25;pos++){
@@ -166,8 +177,8 @@ function execute(move) {
   const side=state.turn, rolled=state.mode==='extreme'?state.dice[move.dieIndex]:state.roll, beforeCoins=state.mode==='ultra'?state.coins[state.turn]:0, before=state.pieces[1-side].filter(p=>p>=0).length;
   state=applyMove(state,move);linearAction='move';lastMove={from:move.from,to:move.to};selected=null;
   const captured=state.pieces[1-side].filter(p=>p>=0).length<before;
-  addLog(`${side===0?'You':'Rival'}${move.kind==='capture'?' used an action':` rolled ${rolled}`}: ${move.kind.startsWith('prepare-')?`prepare ${move.kind.slice(8)} against ${textPos(move.target)} · defender gets a full response turn`:move.kind.startsWith('finish-')?'finish prepared attack':move.kind==='capture'?'capture after response':move.kind==='reverse'?`reverse + ${rolled===1?'die '+(move.movementDie+1):''} (${Math.abs(move.steps)} backward)`:move.kind==='assault'?'coordinated attack':move.action==='special'?specials()[rolled].name:'advance '+rolled} · ${textPos(move.from)}${move.from!==move.to?' → '+textPos(move.to):''}${captured?' · enemy captured':move.contest?' · defender gets the first capture opportunity':''}.`);
-  if(move.kind==='repair')addLog(`${side===0?'You':'Rival'} repaired 1 base health · ${state.health[side]}/5 health.`);
+  addLog(`${side===0?'You':'Rival'}${move.kind==='capture'?' used an action':` rolled ${rolled}`}: ${move.kind.startsWith('prepare-')?`prepare ${move.kind.slice(8)} against ${textPos(move.target)} · defender gets a full response turn`:move.kind.startsWith('finish-')?'finish prepared attack':move.kind==='capture'?'capture after response':move.kind==='reverse'?`reverse + ${rolled===1?'die '+(move.movementDie+1):''} (${Math.abs(move.steps)} backward)`:move.kind==='assault'?'coordinated attack':move.action==='special'?specials()[rolled].name:'advance '+rolled} · ${textPos(move.from)}${move.from!==move.to?' → '+textPos(move.to):''}${state.mode==='extreme'?` · ${ROLE_INFO[pieceRole(state,side,move.piece)].name}`:''}${captured?' · enemy captured':move.contest?' · defender gets the first capture opportunity':''}.`);
+  if(move.kind==='repair')addLog(`${side===0?'You':'Rival'} repaired 1 base health · ${state.health[side]}/5 health · ${state.repairsRemaining[side]} repair tokens left.`);
   if(state.mode==='ultra'&&state.coins[side]>beforeCoins)addLog(`${side===0?'You':'Rival'} earned ${state.coins[side]-beforeCoins} coins.`);
   if(move.to===base(1-side))addLog(`${side===0?'You':'Rival'} dealt 1 base damage and returned home.`);
   save();render();
@@ -213,7 +224,7 @@ $('close-rules').addEventListener('click',()=>$('rules').close());
 $('restart').addEventListener('click',()=>{$('game-mode').value=state.mode||'linear';$('new-game').showModal();});
 $('cancel-new').addEventListener('click',()=>$('new-game').close());
 $('confirm-new').addEventListener('click',()=>{$('new-game').close();restart();});
-function restart(){linearAction='move';generation++;clearTimeout(timer);revealDone=null;$('card-reveal').close();rivalCard=null;cardTab='hand';state=initialState($('game-mode').value,random);selected=null;lastMove=null;busy=false;log=['The camps are quiet. You move first.'];$('die').classList.remove('rolling');save();render();$('roll').focus({preventScroll:true});}
+function restart(){linearAction='move';deployRole='agent';generation++;clearTimeout(timer);revealDone=null;$('card-reveal').close();rivalCard=null;cardTab='hand';state=initialState($('game-mode').value,random);selected=null;lastMove=null;busy=false;log=['The camps are quiet. You move first.'];$('die').classList.remove('rolling');save();render();$('roll').focus({preventScroll:true});}
 function renderActions(){
   const ready=active()&&state.turn===0&&!busy;
   const ultra=state.mode==='ultra';$('ultra-panel').hidden=!ultra;
@@ -241,6 +252,18 @@ function renderHomeCaptures(){
  $('home-capture-note').textContent=captures.length?'Ready: capture uses one action, before or after rolling.':waiting?'Your invader must wait for the home defender’s full response turn.':'Home defenders capture first. If both stay through that response, the invader may capture next turn.';
  if(captures.length>1)for(const m of captures){const b=document.createElement('button');b.className='secondary';b.textContent=`Capture at ${textPos(m.from)}`;b.addEventListener('click',()=>execute(m));$('home-capture-options').append(b);}
 }
+function renderArmy(){
+ const on=state.mode==='extreme';$('extreme-army').hidden=!on;if(!on)return;
+ const picker=$('deploy-roles');picker.replaceChildren();
+ for(const [role,info] of Object.entries(ROLE_INFO)){
+  const count=state.pieces[0].filter((p,i)=>p===49&&pieceRole(state,0,i)===role).length;
+  const button=document.createElement('button');button.className='secondary';button.textContent=`${info.symbol} ${info.name} (${count})`;button.disabled=!active()||state.turn!==0||busy||count===0;button.setAttribute('aria-pressed',String(deployRole===role));button.addEventListener('click',()=>{deployRole=role;selected=null;render();});picker.append(button);
+ }
+ const selectedPiece=selected===null?-1:state.pieces[0].indexOf(selected);
+ const role=selectedPiece>=0&&selected!==49?pieceRole(state,0,selectedPiece):deployRole;
+ $('piece-role-note').textContent=ROLE_INFO[role].text+(selectedPiece>=0&&state.movedAgents.includes(selectedPiece)?' Movement die already used this turn.':'');
+ $('repair-tokens').textContent=`Repair tokens: you ${state.repairsRemaining[0]} · rival ${state.repairsRemaining[1]} (two per game)`;
+}
 function renderExtremeAttacks(){
  const on=state.mode==='extreme';$('extreme-attack-status').hidden=!on;
  if(!on)return;
@@ -259,7 +282,8 @@ function renderLinear(moves){
   renderExtremeAttacks();
   $('linear-controls').hidden=false;$('extreme-assault').hidden=state.mode!=='extreme';
   const ready=active()&&state.turn===0&&!busy&&state.roll!==null;
-  $('linear-move').textContent=state.roll?`Move forward ${state.roll}`:'Move forward';
+  const selectedRole=state.mode==='extreme'?(selected!==null&&selected!==49?pieceRole(state,0,state.pieces[0].indexOf(selected)):deployRole):'agent';
+  $('linear-move').textContent=state.roll?selectedRole==='runner'?`Runner: move 1–${state.roll}`:`Move forward ${state.roll}`:'Move forward';
   $('linear-special').textContent=state.roll?`Special: ${specials()[state.roll].name}`:'Special action';
   for(const [id,action] of [['linear-move','move'],['linear-special','special'],['extreme-assault','assault']]){$(id).disabled=!ready;$(id).setAttribute('aria-pressed',String(linearAction===action));}
   $('linear-note').textContent=state.roll?specials()[state.roll].text:state.mode==='extreme'?'Roll three dice. Each die buys one move, special, or coordinated attack.':'Each die face has its own optional special. Choose one action per turn.';
@@ -271,7 +295,7 @@ function renderLinear(moves){
   if(ready&&['special','assault'].includes(linearAction)){
     const candidates=moves.filter(m=>selected===null?moves.length<=2||m.kind.startsWith('finish-'):m.from===selected);
     if(!moves.length)$('linear-note').textContent+=' No eligible agent right now; move forward or skip instead.';
-    for(const m of candidates){const b=document.createElement('button');b.className='secondary';b.textContent=m.kind.startsWith('prepare-')?`Prepare ${m.kind.slice(8)} at ${textPos(m.target)} · defender responds first`:m.kind.startsWith('finish-')?`Finish attack at ${textPos(m.target)} · use selected die`:m.kind==='repair'?`Repair base · +1 health (${state.health[state.turn]}/5)`:(m.kind==='reverse'?`Reverse + die ${m.movementDie+1} (${Math.abs(m.steps)}) · `:'')+(m.target!==undefined?`Capture enemy at ${textPos(m.target)}`:`${textPos(m.from)} → ${textPos(m.to)}`);b.addEventListener('click',()=>execute(m));$('linear-options').append(b);}
+    for(const m of candidates){const b=document.createElement('button');b.className='secondary';b.textContent=m.kind.startsWith('prepare-')?`Prepare ${m.kind.slice(8)} at ${textPos(m.target)} · defender responds first`:m.kind.startsWith('finish-')?`Finish attack at ${textPos(m.target)} · use selected die`:m.kind==='repair'?`Repair base · +1 health (${state.health[state.turn]}/5) · ${state.repairsRemaining[state.turn]} tokens left`:(m.kind==='reverse'?`Reverse + die ${m.movementDie+1} (${Math.abs(m.steps)}) · `:'')+(m.target!==undefined?`Capture enemy at ${textPos(m.target)}`:`${textPos(m.from)} → ${textPos(m.to)}`);b.addEventListener('click',()=>execute(m));$('linear-options').append(b);}
   }
 }
 for(const [id,action] of [['linear-move','move'],['linear-special','special'],['extreme-assault','assault']])$(id).addEventListener('click',()=>{if(busy||state.turn!==0||state.roll===null||!active())return;linearAction=action;selected=null;render();});

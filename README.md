@@ -54,3 +54,9 @@ Landing on an invader on your turf still captures immediately. Landing on a resi
 ### Extreme home-turf blockades
 
 An enemy pair on your turf can be struck or assaulted immediately. A pair defending its own turf instead requires a preparation action, then a full defender response turn, then another die to finish on the attacker’s next turn. This applies to both coordinated assault and Strike Ahead. Prepared assaults require both attackers to remain; strikes require their striker to remain. Moving either blocker or any involved attacker cancels preparation. Capturing an attacker also cancels it. Any remaining die may finish a ready attack, but extra dice in the preparation turn cannot finish early. Pending attacks, targets and readiness persist in saves, and the UI shows target outlines and prepare/finish actions. Existing saves without pending attacks remain compatible. 130 tests pass.
+
+## Extreme: Roles Edition
+
+Production rules now use a fixed army of six Agents, two Guards and two Runners per side, with five health and two repair tokens. Guards anchor pairs that Vault cannot cross but cannot enter enemy bases. Runners can advance 1 up to the movement die, score base hits, form pairs and support attacks; they cannot capture or lead attacks. Roles are bound to stable piece IDs. The UI exposes role choice when deploying, role symbols, Guard walls, spent-movement markers and repair counts. Previous Extreme saves gain roles and two repair tokens once; incompatible pending Runner attacks are cleared. New games start with the full fixed army.
+
+The complete physical rules are in EXTREME_RULES.md and the printable public page extreme-rules.html. The full suite passes 147 tests across all modes. Publish eight public files, including extreme-rules.html.
