@@ -1,5 +1,5 @@
-import {LINEAR_SPECIALS,linearCamp,linearRank} from './linear.js?v=12';
-import { initialState, legalMoves, applyMove, passTurn, canPass, chooseMove, validSave, camp, numberOf, sideOf, partner, rollTurn, CARDS, upgradeCards, canBuyCard, buyCard, cardBlock, playCard, chooseCard } from './engine.js?v=12';
+import {LINEAR_SPECIALS,linearCamp,linearRank} from './linear.js?v=13';
+import { initialState, legalMoves, applyMove, passTurn, canPass, chooseMove, validSave, camp, numberOf, sideOf, partner, rollTurn, CARDS, upgradeCards, canBuyCard, buyCard, cardBlock, playCard, chooseCard } from './engine.js?v=13';
 const $ = id => document.getElementById(id);
 const KEY = 'tatakai-v4';
 let state = initialState(), difficulty = 'medium', selected = null, busy = false, lastMove = null, timer = null, generation = 0;
@@ -31,7 +31,7 @@ function rollDie() {
 }
 function base(side){return state.mode==='linear'?linearCamp(side):camp(side);}
 function displayMoves(){return legalMoves(state).filter(m=>state.mode!=='linear'||m.action===linearAction);}
-function textPos(pos) { if(state.mode==='linear')return pos===25?'your base':pos===0?'rival base':`row ${linearRank(pos)+1}, ${pos%2?'left':'right'} column`; return pos===base(0)?'Ivory camp':pos===base(1)?'rival camp':`${sideOf(pos)===0?'Ivory':'rival'} ${numberOf(pos)} ${pos%2===1?'left':'right'}`; }
+function textPos(pos) { if(state.mode==='linear')return pos===25?'your base':pos===0?'rival base':`${pos<=12?"rival":"your"} ${Math.min(linearRank(pos)+1,12-linearRank(pos))}, ${pos%2?"upper":"lower"} route`; return pos===base(0)?'Ivory camp':pos===base(1)?'rival camp':`${sideOf(pos)===0?'Ivory':'rival'} ${numberOf(pos)} ${pos%2===1?'left':'right'}`; }
 function counts(pos,side) { return state.pieces[side].filter(p=>p===pos).length; }
 function addLog(message) { log.unshift(message); log=log.slice(0,6); }
 function active() { return state.winner===null && !state.draw; }
@@ -60,7 +60,7 @@ function render() {
     b.disabled=!active() || state.turn!==0 || busy || (!canSelect && !destinations.includes(pos));
     b.setAttribute('aria-label',`${textPos(pos)}, ${own} Ivory, ${rival} rival${destinations.includes(pos)?', legal destination':''}${moves.some(m=>m.from===pos&&m.kind==='capture')?', capture available: select and tap again':''}${canSelect?', select agent':''}`);
     b.setAttribute('aria-pressed',String(selected===pos));
-    const num=document.createElement('span');num.className='number';num.textContent=state.mode==='linear'?(isCamp?'⌂':linearRank(pos)+1):numberOf(pos);b.append(num);
+    const num=document.createElement('span');num.className='number';num.textContent=state.mode==='linear'?(isCamp?'⌂':Math.min(linearRank(pos)+1,12-linearRank(pos))):numberOf(pos);b.append(num);
     if(isCamp){const label=document.createElement('span');label.className='camp-label';label.textContent=pos===0?'RIVAL CAMP':'YOUR CAMP';b.append(label);}
     const tokens=document.createElement('span');tokens.className='tokens';
     for(const s of [1,0])for(let i=0;i<counts(pos,s);i++){const token=document.createElement('span');token.className=`token ${s===1?'black':''}`;tokens.append(token);}
@@ -69,6 +69,28 @@ function render() {
     b.addEventListener('click',()=>handleCell(pos));
     return b;
   }
+  if(state.mode==='linear'){
+    for(let pos=0;pos<=25;pos++){
+      const tile=cell(pos), rank=linearRank(pos), lane=(pos-1)%2;
+      let row,col;
+      if(pos===0){row=1;col=8;}else if(pos===25){row=8;col=1;}
+      else if(lane===0){row=rank<6?1:rank-4;col=rank<6?7-rank:1;}
+      else {row=rank<6?rank+2:8;col=rank<6?8:13-rank;}
+      tile.style.gridRow=row;tile.style.gridColumn=col;
+      if(pos>0&&pos<13)tile.classList.add('enemy');
+      if(pos===0||pos===25){
+        tile.querySelector('.camp-label').textContent=pos===0?'RIVAL':'YOU';
+        tile.querySelector('.number').textContent=counts(pos,pos===0?1:0);
+        const invaders=counts(pos,pos===0?0:1);
+        if(invaders){const badge=document.createElement('span');badge.className='infiltrator-count';badge.textContent=`+${invaders} enemy`;tile.append(badge);}
+      }
+      board.append(tile);
+    }
+    const center=document.createElement('div');center.className='linear-center';
+    center.innerHTML='<strong>LINEAR</strong><span>Two routes. One destination.</span><span>↗ Rival base</span><span>Your base ↙</span>';
+    board.append(center);
+    for(const corner of ['near','far']){const bend=document.createElement('span');bend.className='linear-bend '+corner;bend.textContent='6 ↔ 6';board.append(bend);}
+  }else{
   board.append(cell(0));
   for(const side of [1,0]){
     const ranks=document.createElement('div');ranks.className=`ranks ${side===1?'enemy':''}`;
@@ -76,6 +98,7 @@ function render() {
     board.append(ranks);
   }
   board.append(cell(base(0)));
+  }
   $('rival-count').textContent=`${state.pieces[1].filter(p=>p>=0).length} agents`;
   $('your-count').textContent=`${state.pieces[0].filter(p=>p>=0).length} agents`;
   $('turn-number').textContent=String(state.ply+1).padStart(2,'0');

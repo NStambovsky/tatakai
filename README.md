@@ -99,3 +99,7 @@ Choose Linear when starting a new game. The board has 24 spaces in two lanes of 
 | 6 | Use a home defender to remove one enemy in your base. |
 
 A special consumes the turn, just like movement. Skipping is always available. An agent in an undefended enemy base wins; eliminating all enemies also wins. Linear has no Ultra cards or coins. Its pure rules are in `linear.js`; all three computer difficulties support this mode. The test suite contains 89 checks across all modes.
+
+### Square Linear board
+
+Linear now wraps its two 12-space routes around a square. Bases sit at bottom-left and top-right. Each side’s labels run 1–6 outward from home; the two 6s meet at each route’s bend. Changing routes preserves distance from base. Board position IDs, saved games and movement rules are unchanged.

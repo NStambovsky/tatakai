@@ -3,8 +3,8 @@ export const linearCamp=side=>side===0?25:0;
 export const linearRank=pos=>pos===0?-1:pos===25?12:Math.floor((pos-1)/2);
 export const LINEAR_SPECIALS={
  1:{name:'Step back',text:'Move one agent backward by exactly one space.'},
- 2:{name:'Change lanes',text:'Move one field agent to the empty space beside it.'},
- 3:{name:'Strike ahead',text:'Capture one enemy immediately ahead in the same column. Your agent stays put.'},
+ 2:{name:'Change routes',text:'Switch one field agent to the other route at the same distance from base.'},
+ 3:{name:'Strike ahead',text:'Capture one enemy immediately ahead along the same route. Your agent stays put.'},
  4:{name:'Return home',text:'Bring one agent outside your base back home. This does not capture an infiltrator.'},
  5:{name:'Short advance',text:'Move one agent forward by 1, 2, 3, or 4 spaces instead of 5.'},
  6:{name:'Base defence',text:'Use a defender in your base to remove one enemy infiltrator there.'}
