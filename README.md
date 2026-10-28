@@ -1,109 +1,44 @@
-# Crosscamp
+# Cross Camp
 
-A mobile-friendly, independent browser adaptation of Tim Grayson’s **Tatakai: A Game of Covert Warfare**. Original interface and code; no original artwork, packaging, or video is redistributed. Not affiliated with or endorsed by the creator.
+A local browser strategy game with two modes: Linear and Ultra. Ultra uses exactly the same route movement, capture, checkpoint, Command, intelligence and base-health rules as Linear, with cards and coins added. Classic has been removed.
 
-## Play
+Originally inspired by Tim Grayson’s Tatakai; this is an independent evolving ruleset, unaffiliated with its creator.
 
-Open `https://www.noahstambovsky.com/crosscamp/`. Choose Easy, Medium, or Hard. Roll, select an Ivory agent, then a highlighted destination. Progress saves locally. No accounts, server, or API keys.
+## Run locally
 
-## Rules source
+`npm start`, then open http://localhost:8766. No build or dependencies. `npm test` checks the pure engine.
 
-- Creator’s longer Concept & Mechanics explanation: https://www.facebook.com/tim.grayson/videos/2068646447088149/
-- Creator’s 57-second rules demonstration: https://www.instagram.com/reels/DC6ewbOM20D/
-- Original game: https://www.etsy.com/listing/992899200/tatakai-a-game-of-covert-warfare
-- Reference: https://boardgamegeek.com/boardgame/422635/tatakai-a-game-of-covert-warfare
+## Rules
 
-Both camps start with six agents. A die roll selects the **destination number**, not a movement distance. There are two spaces for each of 1–5 on each half of the board. On either numbered half, moving beside an enemy never captures immediately. The opponent gets a response turn; if both agents stay, the approaching agent can spend a later turn capturing without another matching roll. Home defenders get the first chance to capture an approaching invader without rolling. If both agents remain after that response turn, the invader can capture without rolling on their next turn. Occupied numbered spaces cannot be entered. Friendly agents occupying both spaces of one row protect one another. A six sends any battlefield agent home, or an agent already on the opponent’s half into the enemy camp: returning home removes an enemy infiltrator, and an agent already at home can spend a six to discover and remove one without moving; entering the enemy camp does not remove its defenders. An agent in an undefended enemy camp wins, including when the last defender leaves an already infiltrated camp.
+The in-game briefing in index.html is the current complete rule reference. Six agents per player; 24 field spaces; three base health. Capture on landing, exact base hits return the attacker home. The six die specials remain available in both modes.
 
-### Explicit browser conventions
+Both modes add two nonrenewable Command tokens (+1 or −1 to an unlocked roll), checkpoints on positions 11–14 that block jumping enemy defenders, and intelligence objectives at positions 7/8 for Ivory and 17/18 for Charcoal. Collect at the beginning of your turn by occupying either objective space with neither occupied by an enemy. Each player can collect once. At 160 turns intelligence breaks a tie; base destruction and elimination take precedence.
 
-The two demonstrations do not supply the entire printed rulebook. Agents leaving camp must first deploy to a matching-number space in their own half. Once on the battlefield, an agent can relocate to a matching-number space on either half on a later roll. A six permits a battlefield agent to return home; infiltration requires starting on the opponent’s numbered half. Camp-to-camp jumps are prohibited. This deployment requirement follows the user’s clarification and the sequence shown in the videos. Numbered spaces hold one agent each. A returning or resident defender captures one infiltrator; captured agents stay removed. A turn with no legal move is passed. Losing all agents loses the game. A game draws at 300 moves. Ivory starts. These conventions are disclosed in the in-game briefing and can be revised against the printed rules.
+Ultra: three starting coins, one card, three offers each turn. Captures pay three coins, base hits one. Reinforcement costs six and uses an action. War Chest costs zero and uses an action for three coins. Marked Target costs one, follows a selected enemy agent and pays three extra on capture. Double Agent grants at most one extra action per turn. Recruitment and War Chest can consume extra actions. No market refresh or intelligence collection between extra actions. Forced dice persist through unrolled skips and cannot be changed by Command tokens or cards.
 
-## Difficulty
+## Saves
 
-- Easy: random legal move, taking an immediate win when available.
-- Medium: evaluates surviving agents, paired protection, camp defence, and infiltration.
-- Hard: evaluates each move against the opponent’s best reply for all six possible rolls (expectiminimax).
+Version 5 uses the new `crosscamp-v5` local storage key. Old Tatakai/Crosscamp saves remain untouched; incompatible old boards are not imported. New saves preserve card markets, RNG state, targets, Commands, intelligence and extra-action limits.
 
-All levels receive the same unbiased die rolls using `crypto.getRandomValues` and rejection sampling. The AI uses public board state only.
+## Source layout
 
-## Development and checks
+- linear.js: shared board rules and evaluation.
+- engine.js: turn lifecycle, AI, Commands, cards, economy and save validation.
+- app.js: accessible board controls, local saves, card reveals and UI.
+- index.html: two-mode setup and current rules.
 
-Requires Node.js for tests and Python 3 for the simple local server. No build or dependencies.
+No deployment has been performed for this revision. The published site mirror is deliberately unchanged.
 
-```sh
-npm test
-npm start
-```
+## Extreme prototype — local only
 
-Open http://localhost:8766. `engine.js` contains pure game logic; `app.js` handles the UI and saved state. Tests cover home-side deployment, camp-to-camp restrictions, captures, paired protection, infiltration, leaving camp, pass conditions, AI decisions, corrupt saves, and complete simulated games.
+Extreme follows the supplied square-board sketch: two routes between opposite-corner bases, each with twelve rows and two interchangeable tracks (48 field spaces). Start with ten agents and five health. Roll three dice at once, spend in any order, reuse agents across dice, skip individual dice, or end the turn early. Exact base entry deals one damage and returns the attacker home.
 
-## Deploy
+Ordinary moves can finish on either track of their route. Single pieces can be passed; landing on a lone enemy captures it. Any fully occupied row blocks passage, including friendly or mixed rows. A two-enemy row also blocks ordinary capture landings. Two friendly attackers side by side immediately before an enemy pair may spend any die for a coordinated attack: one moves onto and captures one blocker while its supporter stays.
 
-Copy `index.html`, `style.css`, `engine.js`, `linear.js`, `app.js`, and `icon.svg` into `tatakai/` in the personal website’s publish directory. Commit and push GitHub first, then deploy that directory to the Cloudflare Pages project `noahstambovsky`. Keep all existing published site files in the upload; Cloudflare Direct Upload replaces a full deployment. Do not upload source docs, tests, `.git`, dependencies, or local backups.
+Specials: 1 retreat one row; 2 switch routes and optionally capture a blocker; 3 strike either enemy immediately ahead; 4 return home; 5 vault 1–5 rows over walls and optionally capture a blocker; 6 home defence captures an enemy on your half. Commands, intel, fixed checkpoints, cards and coins remain specific to the other modes. Extreme draws at 160 full turns if no base or elimination victory occurs.
 
-## Clarification from the longer video
+Extreme logic is isolated in extreme.js. Saves retain selected and unspent dice. All three AI difficulties use the same three-die and blockade rules; Hard looks ahead within its remaining dice. The full local suite has 86 passing tests, including 18 Extreme checks, plus browser checks for new-game selection, dice order, individual skipping, reload, coordinated capture, computer turns and phone layout. No production deployment was made.
 
-The Concept & Mechanics video explicitly shows capture from the **adjacent empty partner space**, not by landing on an enemy, and a home defender using a six to find an infiltrator without relocating. Version 3 corrects both behaviors and requires home-side deployment before crossing, including prohibiting camp-to-camp infiltration. Earlier saves are not loaded because their positions may reflect the superseded capture rule.
+### Extreme dice combinations
 
-## Version 4 rule clarification
-
-Implements the requested home-side advantage and opponent-side eligibility for base entry. Mixed rows encode threats directly; alternating turns provide the home response window without separate timers. In-place captures use the same legal move list for the UI and every AI level. Version 3 saves are not loaded because their positions reflect immediate away-side capture.
-
-## Optional turn skip
-
-On every turn, before or after rolling any number, either player may skip instead of moving or capturing. This consumes the turn and leaves all agents in place. All AI levels consider skipping; immediate wins still take priority. Existing v4 saves remain compatible.
-
-## Separate approach and capture turns
-
-Both halves now require an approach turn before capture. Pending approaches persist in saves and clear when either agent leaves the row. Existing saves remain compatible. Camp defence remains unchanged.
-
-## Capture controls and Ultra cards
-
-Capture enemy piece sits below Roll and Skip, with target choices for multiple captures and an explanation when capture must wait for an opponent response.
-
-Ultra starts both sides with 3 coins, one random card, and three distinct market offers. Three new offers appear at the start of each turn. Buy into an eight-card hand, then play any number of held cards for free. Purchased offers are removed and cannot be purchased again. Unused cards persist, and saving/reloading never rerolls the market.
-
-| Card | Buy cost | Effect |
-| --- | ---: | --- |
-| Reinforcements | 6 | New agent at home, using one action; eight living agents maximum. |
-| Second Chance | 2 | Reroll the current unlocked die. |
-| Loaded Die | 4 | Set the current unlocked die to a chosen face. |
-| False Orders | 5 | Set and lock the enemy’s next roll; remains queued through unrolled skips. |
-| Double Agent | 5 | One extra action this turn; stacks. Roll again after taking an action. |
-| Marked Target | 3 | Next capture earns 3 bonus coins; stacks and persists until capture. |
-| War Chest | 3 | Gain 4 coins immediately. |
-| Dead Drop | 4 | Draw two random non-Dead-Drop cards; needs one free hand slot. |
-
-Captures earn 3 coins. Ending your own turn with one or more infiltrators earns 1 coin, including skips. Extra actions do not pay income or refresh offers. Skipping forfeits remaining extra actions. A fresh approach cannot be captured during an extra action: the opponent still gets their response turn. Reinforcements do not sweep camp infiltrators. A victory ends immediately, regardless of extra actions.
-
-Classic is unchanged. Existing Ultra games migrate once, retaining the board, coins, and queued rolls while granting each side one starting card. Hands, offers, card IDs, bonuses, pending response windows, and extra actions are saved. All difficulties share card prices and rules. These are initial balance settings.
-
-## Desktop play area and opponent reveals
-
-Desktop uses a compact board alongside turn controls and a tabbed Hand/Market rack. Cards scroll horizontally with arrow controls and keyboard-accessible tabs. The board and core card controls fit common laptop screens, including 1280×720 with a full hand. Settings and history remain below the play area.
-
-Each opponent card play reveals the card and its actual effect for 3.2 seconds, with a Continue button and Escape support. No subsequent AI action occurs until the reveal finishes. The effect is committed once before presentation; reloading cannot replay it. A saved last-rival-card summary remains visible. Reveals fit phone screens and do not rely on animation.
-
-## Linear mode
-
-Choose Linear when starting a new game. The board has 24 spaces in two lanes of 12, plus the two bases. Each roll can move any agent forward that many rows in its lane, use the corresponding special, or skip. Deployment can use either lane. Pieces can jump occupied intermediate spaces, but must land on an empty field space. Entering the opposing base requires an exact roll. Ordinary movement never captures.
-
-| Roll | Special |
-| --- | --- |
-| 1 | Move one step backwards. |
-| 2 | Change to the empty space in the other lane. |
-| 3 | Capture the enemy directly ahead without moving. |
-| 4 | Recall an agent to your base. |
-| 5 | Advance one to four rows instead of five. |
-| 6 | Use a home defender to remove one enemy in your base. |
-
-A special consumes the turn, just like movement. Skipping is always available. An agent in an undefended enemy base wins; eliminating all enemies also wins. Linear has no Ultra cards or coins. Its pure rules are in `linear.js`; all three computer difficulties support this mode. The test suite contains 89 checks across all modes.
-
-### Square Linear board
-
-Linear now wraps its two 12-space routes around a square. Bases sit at bottom-left and top-right. Each side’s labels run 1–6 outward from home; the two 6s meet at each route’s bend. Changing routes preserves distance from base. Board position IDs, saved games and movement rules are unchanged.
-
-## Crosscamp rules update
-
-The game is now Crosscamp, served at /crosscamp/ with /tatakai/ retained for old links. Classic and Ultra preserve their existing mechanics and attribution. Linear captures enemies on landing (forward, backward, short advance, or route switch); intermediate enemies are jumped without capture. Bases have 3 health. Exact arrival deals one damage and returns the attacker home immediately, regardless of defenders. Zero health or no surviving agents loses. Six now lets a home agent capture one invader on its home half. Existing Linear saves gain three health per base and return any old infiltrators home without damage. Existing finished elimination games stay finished.
+Each agent may use only one movement die per turn. Actions can stack on the same agent. Reverse on a 1 can combine with a second unused die to move backward by that die’s value, consuming both; this is the agent’s one movement die. Alternatively, the 1 can be spent as a one-step-back action. Movement eligibility follows the agent even after scoring and returning home. Route switches, strikes, recalls, vaults and coordinated attacks use actions. Unspent dice and movement locks survive reload. The full suite now passes 90 tests. The public release includes the shared v5 Linear/Ultra changes and Extreme; the existing v4 save data remains untouched.

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {initialState,legalMoves,applyMove,passTurn,chooseMove,validSave,rollTurn} from '../engine.js';
-import {linearRank,linearCamp,LINEAR_SPECIALS,upgradeLinear} from '../linear.js';
+import {linearRank,linearCamp,LINEAR_SPECIALS} from '../linear.js';
 function setup(side,roll){const s=initialState('linear');s.turn=side;s.roll=roll;return s;}
 function act(s,from,to,kind){const m=legalMoves(s).find(m=>m.from===from&&m.to===to&&m.kind===kind);assert.ok(m,`${from} -> ${to} ${kind}`);return applyMove(s,m);}
 test('Linear has twelve two-column ranks and two distinct bases',()=>{
@@ -78,10 +78,6 @@ test('every difficulty takes immediate Linear wins and completes full games',()=
  }
 });
 
-test('legacy Linear save migration returns infiltrators without dealing damage, once',()=>{
- const s=initialState('linear');delete s.health;s.pieces[0][0]=0;s.pieces[1][0]=25;
- const n=upgradeLinear(s);assert.deepEqual(n.health,[3,3]);assert.equal(n.pieces[0][0],25);assert.equal(n.pieces[1][0],0);assert.ok(validSave(n));assert.deepEqual(upgradeLinear(n),n);assert.equal(s.health,undefined);
-});
 test('base damage is independent of defenders and the attacker returns even on victory',()=>{
  let s=setup(0,1);s.health[1]=1;s.pieces[0][0]=1;
  const n=act(s,1,0,'advance');assert.equal(n.health[1],0);assert.equal(n.winner,0);assert.equal(n.pieces[0][0],25);assert.equal(n.pieces[1].filter(p=>p===0).length,6);assert.ok(validSave(n));

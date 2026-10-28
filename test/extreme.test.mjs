@@ -1,0 +1,88 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {initialState,legalMoves,applyMove,rollTurn,passTurn,chooseMove,validSave} from '../engine.js';
+import {extremePos as pos,extremeCamp as camp,selectExtremeDie,skipExtremeDie,fullRow} from '../extreme.js';
+function setup(side=0,values=[2,3,6]){const s=initialState('extreme');s.turn=side;return rollTurn(s,values);}
+function move(s,from,to,kind='advance'){const m=legalMoves(s).find(m=>m.from===from&&m.to===to&&m.kind===kind);assert.ok(m,`${from}→${to} ${kind}`);return applyMove(s,m);}
+test('Extreme starts with ten agents, five health and exactly three independently selectable dice',()=>{
+ const s=initialState('extreme');assert.equal(s.pieces[0].length,10);assert.deepEqual(s.health,[5,5]);assert.ok(validSave(s));
+ const n=rollTurn(s,[2,2,6]);assert.deepEqual(n.dice,[2,2,6]);assert.equal(selectExtremeDie(n,2).roll,6);assert.throws(()=>rollTurn(n,[1,2,3]));assert.throws(()=>rollTurn(s,3));
+});
+for(const side of [0,1]){
+ const rank=r=>side===0?r:11-r;
+ const p=(r,route=0,lane=0)=>pos(rank(r),route,lane);
+ test(`side ${side}: can deploy onto both tracks of both routes`,()=>{const s=setup(side);assert.equal(legalMoves(s).filter(m=>m.kind==='advance').length,4);});
+ test(`side ${side}: weaves around single agents and can choose either landing track`,()=>{
+ const s=setup(side);s.pieces[side][0]=p(9);s.pieces[side][1]=p(8);s.pieces[1-side][0]=p(7,0,0);
+ assert.equal(move(s,p(9),p(7,0,0)).pieces[1-side][0],-1);assert.ok(move(s,p(9),p(7,0,1)));s.pieces[1-side][0]=p(8,0,1);
+ assert.ok(!legalMoves(s).some(m=>m.from===p(9)&&m.kind==='advance')); // mixed full row is also a wall
+ });
+ test(`side ${side}: a full friendly or enemy row cannot be jumped`,()=>{
+ for(const owner of [side,1-side]){const s=setup(side,[3,1,1]);s.pieces[side][0]=p(9);s.pieces[owner][2]=p(8,0,0);s.pieces[owner][3]=p(8,0,1);assert.ok(fullRow(s,rank(8),0));assert.ok(!legalMoves(s).some(m=>m.from===p(9)&&m.kind==='advance'));}
+ });
+ test(`side ${side}: a lone attacker cannot land on a pair, but two can capture one blocker`,()=>{
+ const s=setup(side,[1,4,4]);s.pieces[side][0]=p(9);s.pieces[1-side][0]=p(8,0,0);s.pieces[1-side][1]=p(8,0,1);
+ assert.ok(!legalMoves(s).some(m=>m.from===p(9)&&m.kind==='advance'));s.pieces[side][1]=p(9,0,1);
+ const n=move(s,p(9),p(8),'assault');assert.equal(n.pieces[1-side][0],-1);assert.equal(n.pieces[side][1],p(9,0,1));assert.equal(n.turn,side);assert.equal(n.dice.filter(Boolean).length,2);assert.ok(validSave(n));
+ const m=legalMoves(s).find(m=>m.kind==='assault');assert.throws(()=>applyMove(s,{...m,support:camp(side)}));
+ });
+ test(`side ${side}: special strike and vault break blockades`,()=>{
+ const s=setup(side,[3,5,2]);s.pieces[side][0]=p(9);s.pieces[1-side][0]=p(8);s.pieces[1-side][1]=p(8,0,1);
+ assert.equal(move(s,p(9),p(9),'strike').pieces[1-side][0],-1);
+ const v=selectExtremeDie(s,1);assert.ok(move(v,p(9),p(6),'vault'));assert.equal(move(v,p(9),p(8),'vault').pieces[1-side][0],-1);
+ });
+ test(`side ${side}: switching routes captures a blocker while forward moves stay on their route`,()=>{
+ const s=setup(side);s.pieces[side][0]=p(9);s.pieces[1-side][0]=p(9,1,0);s.pieces[1-side][1]=p(9,1,1);
+ assert.ok(!legalMoves(s).some(m=>m.from===p(9)&&m.kind==='advance'&&m.to===p(7,1,0)));
+ assert.equal(move(s,p(9),p(9,1,0),'sidestep').pieces[1-side][0],-1);
+ });
+ test(`side ${side}: exact base hit returns attacker home and retains other dice`,()=>{
+ const s=setup(side,[1,2,3]);s.pieces[side][0]=p(0);
+ const n=move(s,p(0),camp(1-side));assert.equal(n.health[1-side],4);assert.equal(n.pieces[side][0],camp(side));assert.equal(n.turn,side);assert.ok(validSave(n));
+ assert.ok(!legalMoves(selectExtremeDie(s,1)).some(m=>m.from===p(0)&&m.to===camp(1-side)));
+ s.health[1-side]=1;const win=move(s,p(0),camp(1-side));assert.equal(win.winner,side);assert.deepEqual(win.dice,[]);assert.ok(validSave(win));assert.throws(()=>skipExtremeDie(win));
+ });
+}
+test('spend dice in any order, skip each individually, and advance turn exactly once',()=>{
+ let s=setup(0,[2,2,6]);s=selectExtremeDie(s,1);s=skipExtremeDie(s);assert.deepEqual(s.dice,[2,null,6]);assert.equal(s.turn,0);assert.equal(s.ply,0);assert.throws(()=>selectExtremeDie(s,1));
+ s=skipExtremeDie(selectExtremeDie(s,2));assert.deepEqual(s.dice,[2,null,null]);s=move(s,49,pos(10,0,0));assert.equal(s.turn,1);assert.equal(s.ply,1);assert.deepEqual(s.dice,[]);assert.ok(validSave(s));
+ assert.equal(passTurn(initialState('extreme')).turn,1);assert.equal(passTurn(setup()).ply,1);
+});
+test('used dice and forged actions cannot be replayed; saves preserve remaining dice',()=>{
+ const s=setup();const m=legalMoves(s)[0],n=applyMove(s,m);assert.throws(()=>applyMove(n,m));assert.ok(validSave(JSON.parse(JSON.stringify(n))));
+ for(const edit of [{dice:[6,6,6],roll:2},{dieIndex:3},{health:[6,5]},{pieces:[Array(10).fill(1),Array(10).fill(0)]}])assert.ok(!validSave({...s,...edit}));
+});
+test('all difficulties use all three dice and finish valid games',()=>{
+ let seed=13;const random=()=>((seed=(Math.imul(seed,1664525)+1013904223)>>>0)/4294967296);
+ for(const difficulty of ['easy','medium','hard']){
+  let s=initialState('extreme'),actions=0;
+  while(s.winner===null&&!s.draw){if(!s.dice.length)s=rollTurn(s,Array.from({length:3},()=>1+Math.floor(random()*6)));const m=chooseMove(s,difficulty,random);s=m?applyMove(s,m):skipExtremeDie(s);assert.ok(validSave(s));assert.ok(++actions<=480);}
+ }
+});
+
+test('one movement die per agent, including agents that score and return home',()=>{
+ let s=setup(0,[1,2,3]);s.pieces[0][0]=pos(0,0,0);s=move(s,pos(0,0,0),0);
+ assert.ok(s.movedAgents.includes(0));assert.ok(legalMoves(s).filter(m=>m.action==='move').every(m=>m.piece!==0));
+ const next=legalMoves(s).find(m=>m.action==='move');assert.equal(next.piece,1);s=applyMove(s,next);assert.equal(s.movedAgents.length,2);
+ assert.ok(!legalMoves(s).some(m=>m.action==='move'&&s.movedAgents.includes(m.piece)));
+ assert.ok(validSave(s));
+});
+test('Reverse consumes its action die and the chosen distance die, and blocks a second movement die',()=>{
+ let s=setup(0,[1,4,2]);s.pieces[0][0]=pos(6,0,0);
+ const combo=legalMoves(s).find(m=>m.kind==='reverse'&&m.movementDie===1&&m.to===pos(10,0,1));assert.ok(combo);
+ s=applyMove(s,combo);assert.equal(s.pieces[0][0],pos(10,0,1));assert.deepEqual(s.dice,[null,null,2]);assert.deepEqual(s.movedAgents,[0]);assert.equal(s.turn,0);assert.ok(validSave(s));
+ assert.ok(!legalMoves(s).some(m=>m.action==='move'&&m.piece===0));
+ assert.ok(legalMoves(s).some(m=>m.kind==='sidestep'&&m.piece===0)); // actions still stack
+ assert.throws(()=>applyMove(s,combo));
+});
+test('movement followed by actions is allowed, but another reverse movement is not',()=>{
+ let s=setup(0,[2,1,4]);s.pieces[0][0]=pos(8,0,0);s=move(s,pos(8,0,0),pos(6,0,1));
+ assert.ok(legalMoves(s).some(m=>m.kind==='retreat'&&m.piece===0));assert.ok(!legalMoves(s).some(m=>m.kind==='reverse'&&m.piece===0));
+ s=applyMove(s,legalMoves(s).find(m=>m.kind==='retreat'&&m.piece===0));s=move(s,s.pieces[0][0],49,'recall');assert.equal(s.turn,1);assert.deepEqual(s.movedAgents,[]);assert.ok(validSave(s));
+});
+test('reverse combination obeys walls and forged distance dice are rejected',()=>{
+ const s=setup(0,[1,4,6]);s.pieces[0][0]=pos(5,0,0);s.pieces[1][0]=pos(7,0,0);s.pieces[1][1]=pos(7,0,1);
+ assert.ok(!legalMoves(s).some(m=>m.kind==='reverse'&&m.piece===0));
+ s.pieces[1][1]=0;const m=legalMoves(s).find(m=>m.kind==='reverse');assert.ok(m);assert.throws(()=>applyMove(s,{...m,movementDie:0}));
+ assert.ok(!validSave({...s,movedAgents:[0,0]}));
+});
