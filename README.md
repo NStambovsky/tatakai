@@ -1,10 +1,10 @@
-# Tatakai — browser edition
+# Crosscamp
 
 A mobile-friendly, independent browser adaptation of Tim Grayson’s **Tatakai: A Game of Covert Warfare**. Original interface and code; no original artwork, packaging, or video is redistributed. Not affiliated with or endorsed by the creator.
 
 ## Play
 
-Open `https://www.noahstambovsky.com/tatakai/`. Choose Easy, Medium, or Hard. Roll, select an Ivory agent, then a highlighted destination. Progress saves locally. No accounts, server, or API keys.
+Open `https://www.noahstambovsky.com/crosscamp/`. Choose Easy, Medium, or Hard. Roll, select an Ivory agent, then a highlighted destination. Progress saves locally. No accounts, server, or API keys.
 
 ## Rules source
 
@@ -103,3 +103,7 @@ A special consumes the turn, just like movement. Skipping is always available. A
 ### Square Linear board
 
 Linear now wraps its two 12-space routes around a square. Bases sit at bottom-left and top-right. Each side’s labels run 1–6 outward from home; the two 6s meet at each route’s bend. Changing routes preserves distance from base. Board position IDs, saved games and movement rules are unchanged.
+
+## Crosscamp rules update
+
+The game is now Crosscamp, served at /crosscamp/ with /tatakai/ retained for old links. Classic and Ultra preserve their existing mechanics and attribution. Linear captures enemies on landing (forward, backward, short advance, or route switch); intermediate enemies are jumped without capture. Bases have 3 health. Exact arrival deals one damage and returns the attacker home immediately, regardless of defenders. Zero health or no surviving agents loses. Six now lets a home agent capture one invader on its home half. Existing Linear saves gain three health per base and return any old infiltrators home without damage. Existing finished elimination games stay finished.

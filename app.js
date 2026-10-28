@@ -1,5 +1,5 @@
-import {LINEAR_SPECIALS,linearCamp,linearRank} from './linear.js?v=13';
-import { initialState, legalMoves, applyMove, passTurn, canPass, chooseMove, validSave, camp, numberOf, sideOf, partner, rollTurn, CARDS, upgradeCards, canBuyCard, buyCard, cardBlock, playCard, chooseCard } from './engine.js?v=13';
+import {LINEAR_SPECIALS,linearCamp,linearRank,upgradeLinear} from './linear.js?v=14';
+import { initialState, legalMoves, applyMove, passTurn, canPass, chooseMove, validSave, camp, numberOf, sideOf, partner, rollTurn, CARDS, upgradeCards, canBuyCard, buyCard, cardBlock, playCard, chooseCard } from './engine.js?v=14';
 const $ = id => document.getElementById(id);
 const KEY = 'tatakai-v4';
 let state = initialState(), difficulty = 'medium', selected = null, busy = false, lastMove = null, timer = null, generation = 0;
@@ -14,6 +14,7 @@ function save() {
 }
 try {
   const data = JSON.parse(localStorage.getItem(KEY));
+  if(data)data.state=upgradeLinear(data.state);
   if (data && validSave(data.state)) {
     state=upgradeCards(data.state,random);
     if (Object.hasOwn(notes,data.difficulty)) difficulty=data.difficulty;
@@ -80,7 +81,8 @@ function render() {
       if(pos>0&&pos<13)tile.classList.add('enemy');
       if(pos===0||pos===25){
         tile.querySelector('.camp-label').textContent=pos===0?'RIVAL':'YOU';
-        tile.querySelector('.number').textContent=counts(pos,pos===0?1:0);
+        tile.querySelector('.number').textContent=`${state.health[pos===0?1:0]}♥`;
+        tile.setAttribute('aria-label',tile.getAttribute('aria-label')+`, base health ${state.health[pos===0?1:0]} of 3`);
         const invaders=counts(pos,pos===0?0:1);
         if(invaders){const badge=document.createElement('span');badge.className='infiltrator-count';badge.textContent=`+${invaders} enemy`;tile.append(badge);}
       }
@@ -99,8 +101,8 @@ function render() {
   }
   board.append(cell(base(0)));
   }
-  $('rival-count').textContent=`${state.pieces[1].filter(p=>p>=0).length} agents`;
-  $('your-count').textContent=`${state.pieces[0].filter(p=>p>=0).length} agents`;
+  $('rival-count').textContent=`${state.pieces[1].filter(p=>p>=0).length} agents${state.mode==='linear'?` · ${state.health[1]}/3 health`:''}`;
+  $('your-count').textContent=`${state.pieces[0].filter(p=>p>=0).length} agents${state.mode==='linear'?` · ${state.health[0]}/3 health`:''}`;
   $('turn-number').textContent=String(state.ply+1).padStart(2,'0');
   $('die').textContent=dice[state.roll??0];
   $('die').setAttribute('aria-label',state.roll?`Rolled ${state.roll}`:'Die not rolled');
@@ -124,7 +126,8 @@ function render() {
     detail=state.roll===null?moves.length?'Capture an adjacent enemy, roll to move, or skip.':'Roll the die to see your options, or skip this turn.':state.roll===6?'Six: move, capture, or skip. Returning home is optional.':`Rolled a ${state.roll}. Move to a ${state.roll} space, capture if available, or skip.`;
     instruction=moves.length===0&&state.roll!==null?'No agent can use this roll. Pass to the rival.':selected===null?'Tap one of your agents, then a highlighted space.':`Selected: ${textPos(selected)}. Tap a gold destination. Use Capture enemy piece to capture in place; this uses one action.`;
   }
-  if(state.mode==='linear'&&state.turn===0&&!busy&&active()){detail=state.roll===null?'Roll for forward distance and a special action, or skip.':`Roll ${state.roll}: advance ${state.roll}, use ${LINEAR_SPECIALS[state.roll].name}, or skip.`;instruction=linearAction==='special'?'Choose an agent, then a special destination or the action button below.':'Select an agent, then a highlighted forward destination.';}
+  if(state.mode==='linear'&&state.turn===0&&!busy&&active()){detail=state.roll===null?'Roll for forward distance and a special action, or skip.':`Roll ${state.roll}: advance ${state.roll}, use ${LINEAR_SPECIALS[state.roll].name}, or skip.`;instruction=linearAction==='special'?'Choose an agent, then a special destination or the action button below.':'Select an agent, then a highlighted destination. Land on an enemy to capture it.';}
+  if(state.mode==='linear'&&!active()&&!state.draw){title=state.winner===0?'Victory.':'Defeat.';detail=state.health.includes(0)?'The enemy base has fallen. Three hits end the campaign.':'All opposing agents have been captured.';if(state.winner===1)detail=state.health[0]===0?'Your base lost all three health.':'All your agents have been captured.';}
   $('status-title').textContent=title;$('status-detail').textContent=detail;$('selection').textContent=instruction;
 }
 function handleCell(pos) {
@@ -141,6 +144,7 @@ function execute(move) {
   const captured=state.pieces[1-side].filter(p=>p>=0).length<before;
   addLog(state.mode==='linear'?`${side===0?'You':'Rival'} rolled ${rolled}: ${move.action==='special'?LINEAR_SPECIALS[rolled].name:'advance '+rolled} · ${textPos(move.from)}${move.from!==move.to?' → '+textPos(move.to):''}${captured?' · enemy captured':''}.` : move.kind==='capture' ? `${side===0?'You':'Rival'} captured the adjacent agent from ${textPos(move.from)} · action used${rolled===null?' without rolling':''}.` : move.from===move.to ? `${side===0?'You':'Rival'} rolled 6: a home defender discovered and removed an infiltrator.` : `${side===0?'You':'Rival'} rolled ${rolled}: ${textPos(move.from)} → ${textPos(move.to)}${captured?' · captured an adjacent agent':move.to>0&&move.to<21&&state.pieces[1-side].includes(partner(move.to))?' · enemy threatened; gets a response turn before capture':''}.`);
   if(state.mode==='ultra' && state.coins[side]>beforeCoins)addLog(`${side===0?'You':'Rival'} earned ${state.coins[side]-beforeCoins} coins${captured?' from capture':''}${state.pieces[side].includes(base(1-side))?' · enemy-base income':''}.`);
+  if(state.mode==='linear'&&move.to===base(1-side))addLog(`${side===0?'You':'Rival'} hit the enemy base for 1 damage. Agent returned home. Base health: ${state.health[1-side]}/3.`);
   save();render();
   if(active() && state.turn===1)scheduleAI();
   else if(state.turn===0 && active())$('roll').focus({preventScroll:true});

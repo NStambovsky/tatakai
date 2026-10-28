@@ -1,4 +1,4 @@
-import {initialLinear,linearOutcome,linearMoves,applyLinear,evaluateLinear,validLinear} from './linear.js?v=13';
+import {initialLinear,linearOutcome,linearMoves,applyLinear,evaluateLinear,validLinear} from './linear.js?v=14';
 // State and rules are independent of the UI. 0 = ivory, 1 = charcoal.
 export const VERSION = 4;
 export const camp = side => side === 0 ? 21 : 0;
